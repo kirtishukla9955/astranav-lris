@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mission Control — AstraNav-LRIS</title>
+<meta name="description" content="AstraNav-LRIS Mission Control — live ice detection, hazard mapping, shadow-hopping route planning and readiness scoring for the lunar south pole." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22%2304050a%22 stroke=%22%2334e8ec%22 stroke-width=%224%22/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body class="dash-body">
+
+<canvas id="bg-stars" aria-hidden="true"></canvas>
+
+<!-- ===== TOP BAR ===== -->
+<header class="dtop">
+  <div class="dtop-left">
+    <a href="index.html" class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="16" r="13" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 4" opacity="0.5"/><circle cx="16" cy="23.5" r="2.6" fill="currentColor"/></svg>
+      </span>
+      <span class="brand-text">AstraNav<span class="brand-dash">·</span>LRIS</span>
+    </a>
+    <span class="dtop-divider"></span>
+    <select id="regionSelect" class="region-select">
+      <option value="shackleton">Shackleton Rim · 89.9°S</option>
+      <option value="faustini">Faustini Crater · 87.3°S</option>
+      <option value="degerlache">de Gerlache Rim · 88.5°S</option>
+    </select>
+  </div>
+  <div class="dtop-center mono">
+    <span class="dtop-stat"><span class="dot-pulse"></span> LIVE SIM</span>
+    <span class="dtop-stat" id="cursorReadout">LAT — · LON —</span>
+    <span class="dtop-stat" id="clockReadout">T+00:00:00</span>
+  </div>
+  <div class="dtop-right">
+    <button class="icon-btn rail-toggle" id="railToggle" title="Layers & Tools" aria-label="Toggle layers panel">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <a href="index.html" class="btn btn-ghost btn-sm">← <span class="back-label">Back to Site</span></a>
+  </div>
+</header>
+
+<div class="rail-backdrop" id="railBackdrop"></div>
+
+<div class="dash-shell">
+
+  <!-- ===== LEFT RAIL ===== -->
+  <aside class="rail">
+    <div class="rail-block">
+      <h4 class="rail-title">Layers</h4>
+      <label class="layer-toggle">
+        <input type="checkbox" id="layerIce" checked>
+        <span class="swatch swatch-ice"></span> Ice Detection
+      </label>
+      <label class="layer-toggle">
+        <input type="checkbox" id="layerHazard" checked>
+        <span class="swatch swatch-hazard"></span> Hazard Mask
+      </label>
+      <label class="layer-toggle">
+        <input type="checkbox" id="layerConfidence">
+        <span class="swatch swatch-confidence"></span> Confidence Overlay
+      </label>
+      <label class="layer-toggle">
+        <input type="checkbox" id="layerRoute" checked>
+        <span class="swatch swatch-route"></span> Route &amp; Telemetry
+      </label>
+    </div>
+
+    <div class="rail-block">
+      <h4 class="rail-title">Mode</h4>
+      <div class="mode-tabs" id="modeTabs">
+        <button class="mode-tab active" data-mode="route">Plan Route</button>
+        <button class="mode-tab" data-mode="compare">Compare Sites</button>
+        <button class="mode-tab" data-mode="swarm">Swarm View</button>
+      </div>
+      <p class="rail-hint" id="modeHint">Click a start point, then an end point, on the map.</p>
+    </div>
+
+    <div class="rail-block" id="routeControls">
+      <h4 class="rail-title">Playback</h4>
+      <div class="playback-row">
+        <button class="icon-btn" id="playBtn" title="Play/Pause">
+          <svg id="playIcon" viewBox="0 0 24 24" fill="none"><path d="M7 5v14l11-7L7 5Z" fill="currentColor"/></svg>
+        </button>
+        <input type="range" id="scrubber" min="0" max="100" value="0" class="scrubber">
+        <button class="icon-btn" id="resetBtn" title="Reset">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 15a8 8 0 1 0 1-9.5L4 8M18.5 9a8 8 0 0 1-1 9.5L20 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="route-stats mono">
+        <div><span>Distance</span><b id="statDistance">—</b></div>
+        <div><span>Pitstops</span><b id="statPitstops">—</b></div>
+        <div><span>Energy</span><b id="statEnergy">—</b></div>
+        <div><span>Dark Dwell</span><b id="statDark">—</b></div>
+      </div>
+      <div class="battery-chart-wrap">
+        <span class="rail-subtitle">Predicted Battery (ML model)</span>
+        <canvas id="batteryChart" height="70"></canvas>
+      </div>
+    </div>
+
+    <div class="rail-block" id="compareControls" hidden>
+      <h4 class="rail-title">Comparison Set</h4>
+      <p class="rail-hint">Click up to 3 points on the map to shortlist candidate sites.</p>
+      <div id="compareList" class="compare-list"></div>
+      <button class="btn btn-outline btn-sm" id="clearCompare">Clear Selection</button>
+    </div>
+
+    <div class="rail-block" id="swarmControls" hidden>
+      <h4 class="rail-title">Active Rovers</h4>
+      <div class="swarm-card">
+        <span class="swarm-dot swarm-dot-a"></span>
+        <div>
+          <b>Rover Alpha</b>
+          <span class="mono" id="swarmABattery">100%</span>
+        </div>
+      </div>
+      <div class="swarm-card">
+        <span class="swarm-dot swarm-dot-b"></span>
+        <div>
+          <b>Rover Beta</b>
+          <span class="mono" id="swarmBBattery">100%</span>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" id="rerollSwarm">Re-roll Routes</button>
+      <button class="icon-btn-wide" id="swarmPlayBtn">▶ Play Swarm</button>
+    </div>
+  </aside>
+
+  <!-- ===== MAP ===== -->
+  <main class="map-stage">
+    <canvas id="mapCanvas"></canvas>
+    <div class="map-legend mono">
+      <span><i class="leg-dot leg-ice"></i>Ice candidate</span>
+      <span><i class="leg-dot leg-hazard"></i>No-go zone</span>
+      <span><i class="leg-dot leg-route"></i>Route</span>
+      <span><i class="leg-dot leg-pitstop"></i>Solar pitstop</span>
+    </div>
+    <div class="map-scale mono">1 cell ≈ 140 m</div>
+  </main>
+
+  <!-- ===== RIGHT SLIDE-OUT: LMRS PANEL ===== -->
+  <aside class="lmrs-panel" id="lmrsPanel">
+    <div class="lmrs-head">
+      <span class="rail-title">Lunar Mining Readiness</span>
+      <button class="icon-btn" id="closeLmrs">✕</button>
+    </div>
+    <div class="lmrs-score-ring">
+      <svg viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="52" class="ring-bg"/>
+        <circle cx="60" cy="60" r="52" class="ring-fg" id="lmrsRingFg"/>
+      </svg>
+      <div class="lmrs-score-num"><span id="lmrsScoreNum">—</span><small>/100</small></div>
+    </div>
+    <div class="lmrs-coord mono" id="lmrsCoord">—</div>
+
+    <div class="lmrs-bars">
+      <div class="lmrs-bar-row">
+        <span>Resource Accessibility (RAI)</span>
+        <div class="bar-track"><div class="bar-fill bar-cyan" id="barRAI"></div></div>
+        <b id="valRAI">—</b>
+      </div>
+      <div class="lmrs-bar-row">
+        <span>Communication Visibility</span>
+        <div class="bar-track"><div class="bar-fill bar-amber" id="barComm"></div></div>
+        <b id="valComm">—</b>
+      </div>
+      <div class="lmrs-bar-row">
+        <span>Thermal Risk &amp; Energy</span>
+        <div class="bar-track"><div class="bar-fill bar-green" id="barThermal"></div></div>
+        <b id="valThermal">—</b>
+      </div>
+    </div>
+
+    <div class="lmrs-detail-grid mono">
+      <div><span>Ice volume</span><b id="detIceVol">—</b></div>
+      <div><span>Ice depth</span><b id="detIceDepth">—</b></div>
+      <div><span>Detection confidence</span><b id="detConfidence">—</b></div>
+      <div><span>Energy to reach (Wh)</span><b id="detEnergy">—</b></div>
+      <div><span>Shadow status</span><b id="detShadow">—</b></div>
+    </div>
+
+    <button class="btn btn-outline btn-sm" id="addToCompareBtn">+ Add to Comparison</button>
+  </aside>
+
+  <!-- ===== BOTTOM DRAWER: COMPARISON TABLE ===== -->
+  <div class="compare-drawer" id="compareDrawer" hidden>
+    <div class="drawer-head">
+      <span class="rail-title">Site Comparison</span>
+      <button class="icon-btn" id="closeCompareDrawer">✕</button>
+    </div>
+    <div class="compare-table-wrap">
+      <table class="compare-table" id="compareTable"></table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MISSION COPILOT ===== -->
+<button class="copilot-fab" id="copilotFab" title="Mission Copilot">
+  <svg viewBox="0 0 24 24" fill="none"><path d="M12 3a8 8 0 0 0-8 8c0 2.4 1.1 4.5 2.8 5.9L6 21l4.3-1.6c.5.1 1.1.1 1.7.1a8 8 0 0 0 0-16Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="9" cy="11" r="1" fill="currentColor"/><circle cx="12" cy="11" r="1" fill="currentColor"/><circle cx="15" cy="11" r="1" fill="currentColor"/></svg>
+</button>
+
+<div class="copilot-panel" id="copilotPanel" hidden>
+  <div class="copilot-head">
+    <span><span class="dot-pulse"></span> Mission Copilot</span>
+    <button class="icon-btn" id="closeCopilot">✕</button>
+  </div>
+  <div class="copilot-messages" id="copilotMessages">
+    <div class="msg msg-bot">I'm reading the live ice, hazard, and route layers for this region. Ask me why a corridor is hazardous, what a site's LMRS breakdown means, or how much energy a route will cost.</div>
+  </div>
+  <div class="copilot-chips" id="copilotChips">
+    <button class="chip-btn">Why is this corridor hazardous?</button>
+    <button class="chip-btn">Explain the LMRS score</button>
+    <button class="chip-btn">How much energy will this route use?</button>
+    <button class="chip-btn">How confident is the ice detection here?</button>
+  </div>
+  <form class="copilot-input-row" id="copilotForm">
+    <input type="text" id="copilotInput" placeholder="Ask about this mission…" autocomplete="off">
+    <button type="submit" class="icon-btn">→</button>
+  </form>
+</div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>
