@@ -59,85 +59,9 @@
 })();
 
 /* ---------------------------------------------------------------
-   2) 3D MOON HERO (Three.js) — procedural lunar surface,
-      lit from one side, glowing south-pole marker ring.
+   2) 3D MOON HERO (Three.js) — disabled in favor of isometric visual
 ---------------------------------------------------------------- */
-(function moonScene() {
-  const canvasEl = document.getElementById('moon-canvas');
-  if (!canvasEl || typeof THREE === 'undefined') return;
-
-  const container = canvasEl.parentElement;
-  let width = container.clientWidth;
-  let height = container.clientHeight;
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 100);
-  camera.position.set(0, 0.1, 6.6);
-
-  const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(width, height);
-
-  /* ---------- Real lunar textures (NASA-derived, public domain) ---------- */
-  const loader = new THREE.TextureLoader();
-  const albedoTex = loader.load('assets/moon_albedo.jpg');
-  const bumpTex = loader.load('assets/moon_bump.jpg');
-  albedoTex.anisotropy = 4;
-
-  const moonGroup = new THREE.Group();
-  const BASE_TILT_X = -0.92; // brings the south pole (the whole point of the product) into clear view
-  moonGroup.rotation.z = 0.18;
-  moonGroup.rotation.x = BASE_TILT_X;
-  scene.add(moonGroup);
-
-  const geometry = new THREE.SphereGeometry(1.65, 128, 128);
-  const material = new THREE.MeshStandardMaterial({
-    map: albedoTex,
-    bumpMap: bumpTex,
-    bumpScale: 0.016,
-    roughness: 1,
-    metalness: 0,
-  });
-  const moon = new THREE.Mesh(geometry, material);
-  moonGroup.add(moon);
-
-  // Lighting — a single restrained "sun" for a real, soft terminator line,
-  // plus a low neutral ambient fill. No colored rim lights, no glow sprites,
-  // no emissive overlays — the goal is a plain, documentary-photograph read,
-  // not a glossy render.
-  const sun = new THREE.DirectionalLight(0xffffff, 2.1);
-  sun.position.set(-4, 2.4, 3.2);
-  scene.add(sun);
-  const fill = new THREE.AmbientLight(0x1a1a1a, 0.55);
-  scene.add(fill);
-
-  // subtle mouse parallax
-  let targetRotY = 0, targetRotX = 0;
-  window.addEventListener('mousemove', (e) => {
-    const nx = (e.clientX / window.innerWidth) - 0.5;
-    const ny = (e.clientY / window.innerHeight) - 0.5;
-    targetRotY = nx * 0.25;
-    targetRotX = ny * 0.12;
-  });
-
-  function resize() {
-    width = container.clientWidth;
-    height = container.clientHeight;
-    if (!width || !height) return;
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    renderer.setSize(width, height);
-  }
-  window.addEventListener('resize', resize);
-
-  function animate() {
-    requestAnimationFrame(animate);
-    moonGroup.rotation.y += 0.0018;
-    moonGroup.rotation.x += ((BASE_TILT_X + targetRotX) - moonGroup.rotation.x) * 0.02;
-    renderer.render(scene, camera);
-  }
-  animate();
-})();
+// 3D moon canvas removed to match redesigned isometric telemetry panel.
 
 /* ---------------------------------------------------------------
    3) SCROLL REVEALS — IntersectionObserver, staggered
