@@ -62,17 +62,29 @@ function mulberry32(seed) {
   };
 }
 
-const GRID_COLS = 46, GRID_ROWS = 28;
+const HOST_NAME = window.location.hostname || '127.0.0.1';
+const BACKEND_BASE_URL = window.localStorage.getItem('ASTRANAV_API_URL') || `http://${HOST_NAME}:8000`;
+const BACKEND_WS_URL = window.localStorage.getItem('ASTRANAV_WS_URL') || `ws://${HOST_NAME}:8000`;
+
+let GRID_COLS = 46, GRID_ROWS = 28;
 const DARK_PENALTY = 4.2;
 const BASE_WH_PER_CELL = 2.1;
 const SHADOW_WH_EXTRA = 5.4;
 const DARK_BUDGET_CELLS = 5;
 
-const REGION_SEEDS = { shackleton: 1337, faustini: 5021, degerlache: 8842 };
+const REGION_SEEDS = {
+  shackleton: 1337,
+  faustini: 5021,
+  degerlache: 8842,
+  'shackleton-east': 1337,
+  haworth: 5021
+};
 const REGION_LABELS = {
   shackleton: 'Shackleton Rim · 89.9°S',
   faustini: 'Faustini Crater · 87.3°S',
   degerlache: 'de Gerlache Rim · 88.5°S',
+  'shackleton-east': 'Shackleton Crater — Eastern Rim',
+  haworth: 'Haworth Crater'
 };
 
 let region = null; // current region data
@@ -593,9 +605,19 @@ function updateCursorReadout(g) {
   const el = document.getElementById('cursorReadout');
   if (!el) return;
   if (g.x < 0 || g.y < 0 || g.x >= region.cols || g.y >= region.rows) { el.textContent = 'LAT — · LON —'; return; }
-  const lat = -(89.9 - g.y * 0.02).toFixed(3);
-  const lon = (g.x * 0.035 - 0.7).toFixed(3);
-  el.textContent = `LAT ${lat}°S · LON ${lon}°`;
+  
+  const cell = cellAt(g.x, g.y);
+  if (cell && cell.lat !== undefined && cell.lon !== undefined) {
+    const latAbs = Math.abs(cell.lat).toFixed(4);
+    const lonAbs = Math.abs(cell.lon).toFixed(4);
+    const latDir = cell.lat < 0 ? 'S' : 'N';
+    const lonDir = cell.lon < 0 ? 'W' : 'E';
+    el.textContent = `LAT ${latAbs}°${latDir} · LON ${lonAbs}°${lonDir}`;
+  } else {
+    const lat = -(89.9 - g.y * 0.02).toFixed(3);
+    const lon = (g.x * 0.035 - 0.7).toFixed(3);
+    el.textContent = `LAT ${lat}°S · LON ${lon}°`;
+  }
 }
 
 function setModeHint(text) { const el = document.getElementById('modeHint'); if (el) el.textContent = text; }
@@ -628,6 +650,14 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
   });
 });
 
+document.getElementById('routeIceSeeking').addEventListener('change', () => {
+  if (routeStart && routeEnd) computeAndShowRoute();
+});
+document.getElementById('routePredictiveBattery').addEventListener('change', () => {
+  if (routeStart && routeEnd) computeAndShowRoute();
+  if (mode === 'swarm') ensureSwarmRoutes(true);
+});
+
 // Mobile rail toggle — the layers/mode/playback panel slides in as a drawer
 // on narrow viewports since there's no room for a persistent sidebar.
 const railEl = document.querySelector('.rail');
@@ -646,47 +676,265 @@ document.getElementById('regionSelect').addEventListener('change', (e) => {
 });
 
 /* ---- route compute / playback ---- */
-function computeAndShowRoute() {
-  const r = buildRoute(routeStart, routeEnd);
-  if (!r) { flashHint('No safe path found — hazard zones block this route.'); routeEnd = null; return; }
-  activeRoute = r; routeProgress = 0;
+function latLonToGrid(lat, lon) {
+  let bestX = 0, bestY = 0, bestDist = Infinity;
+  for (let y = 0; y < region.rows; y++) {
+    for (let x = 0; x < region.cols; x++) {
+      const cell = region.cells[y][x];
+      const d = Math.hypot(cell.lat - lat, cell.lon - lon);
+      if (d < bestDist) {
+        bestDist = d;
+        bestX = x;
+        bestY = y;
+      }
+    }
+  }
+  return { x: bestX, y: bestY };
+}
+
+function mapBackendRouteToFrontend(backendRoute) {
+  const path = [];
+  const pitstopIndices = [];
+  const energySteps = [];
+  let darkCells = 0;
+
+  backendRoute.waypoints.forEach((wp, idx) => {
+    const gridPt = latLonToGrid(wp.lat, wp.lon);
+    if (path.length === 0 || path[path.length - 1].x !== gridPt.x || path[path.length - 1].y !== gridPt.y || wp.type === 'solar_pitstop') {
+      path.push({ x: gridPt.x, y: gridPt.y, pitstop: wp.type === 'solar_pitstop' });
+    }
+    
+    if (wp.type === 'solar_pitstop') {
+      pitstopIndices.push(path.length - 1);
+    }
+    
+    energySteps.push({
+      wh: wp.cumulative_energy_wh,
+      battery: wp.battery_pct_remaining,
+      shadow: wp.is_shadowed
+    });
+
+    if (wp.is_shadowed) {
+      darkCells++;
+    }
+  });
+
+  return {
+    path,
+    pitstopIndices,
+    energySteps,
+    totalWh: Math.round(backendRoute.total_energy_wh),
+    distanceM: backendRoute.total_distance_m,
+    darkCells,
+    darkMinutes: Math.round(darkCells * 1.8),
+  };
+}
+
+async function computeAndShowRoute() {
+  const startCell = cellAt(routeStart.x, routeStart.y);
+  const endCell = cellAt(routeEnd.x, routeEnd.y);
+  
+  let success = false;
+  
+  if (startCell && endCell && startCell.lat !== undefined && startCell.lon !== undefined) {
+    try {
+      const isSeeking = document.getElementById('routeIceSeeking')?.checked || false;
+      const isPredictive = document.getElementById('routePredictiveBattery')?.checked || false;
+      
+      const url = `${BACKEND_BASE_URL}/api/route?` + new URLSearchParams({
+        start_lat: startCell.lat,
+        start_lon: startCell.lon,
+        end_lat: endCell.lat,
+        end_lon: endCell.lon,
+        region_id: currentRegionKey,
+        ice_seeking: isSeeking,
+        use_predictive_battery: isPredictive,
+        initial_battery_pct: 100.0,
+        dark_budget_wh: 80.0,
+        shadow_penalty_weight: 5.0
+      });
+      
+      console.log("Planning route via backend API:", url);
+      const res = await fetch(url);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail?.reason || `HTTP status ${res.status}`);
+      }
+      
+      const data = await res.json();
+      const mappedRoute = mapBackendRouteToFrontend(data);
+      activeRoute = mappedRoute;
+      routeProgress = 0;
+      success = true;
+      
+      updateRouteStatsUI(mappedRoute);
+      setModeHint('Route planned via backend. Use playback controls to simulate the traverse.');
+      render();
+    } catch (err) {
+      console.warn("Backend routing failed, falling back to local simulation:", err);
+      flashHint(`Backend Route Error: ${err.message}. Falling back to simulation.`);
+    }
+  }
+  
+  if (!success) {
+    const r = buildRoute(routeStart, routeEnd);
+    if (!r) { flashHint('No safe path found — hazard zones block this route.'); routeEnd = null; return; }
+    activeRoute = r; routeProgress = 0;
+    updateRouteStatsUI(r);
+    setModeHint('Route planned via local simulation. Use playback controls.');
+    render();
+  }
+}
+
+function updateRouteStatsUI(r) {
   document.getElementById('statDistance').textContent = `${(r.distanceM / 1000).toFixed(2)} km`;
   document.getElementById('statPitstops').textContent = r.pitstopIndices.length;
   document.getElementById('statEnergy').textContent = `${r.totalWh} Wh`;
   document.getElementById('statDark').textContent = `${r.darkMinutes} min`;
   document.getElementById('scrubber').value = 0;
   drawBatteryChart(r.energySteps);
-  setModeHint('Route planned. Use playback controls to simulate the traverse.');
-  render();
 }
+
 function resetRouteStats() {
   ['statDistance','statPitstops','statEnergy','statDark'].forEach(id => document.getElementById(id).textContent = '—');
   drawBatteryChart([]);
 }
 
+let telemetryWS = null;
+
+function startWSPlayback() {
+  if (telemetryWS) {
+    telemetryWS.close();
+  }
+  
+  const startCell = cellAt(routeStart.x, routeStart.y);
+  const endCell = cellAt(routeEnd.x, routeEnd.y);
+  if (!startCell || !endCell) return;
+
+  const isSeeking = document.getElementById('routeIceSeeking')?.checked || false;
+  const isPredictive = document.getElementById('routePredictiveBattery')?.checked || false;
+  
+  const wsUrl = `${BACKEND_WS_URL}/ws/telemetry/${currentRegionKey}?` + new URLSearchParams({
+    rover_id: 'rover-1',
+    start_lat: startCell.lat,
+    start_lon: startCell.lon,
+    end_lat: endCell.lat,
+    end_lon: endCell.lon,
+    use_predictive_battery: isPredictive,
+    ice_seeking: isSeeking,
+    tick_interval_s: 0.2,
+    dark_budget_wh: 80.0,
+    shadow_penalty_weight: 5.0,
+    initial_battery_pct: 100.0
+  });
+
+  console.log("Connecting to WebSocket Telemetry:", wsUrl);
+  telemetryWS = new WebSocket(wsUrl);
+
+  playing = true;
+  document.getElementById('playIcon').innerHTML = '<rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/>';
+
+  telemetryWS.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      console.log("Telemetry Frame received:", data);
+      
+      const lat = data.rover.lat;
+      const lon = data.rover.lon;
+      const battery = data.rover.battery;
+      const status = data.rover.status;
+      
+      const gridPt = latLonToGrid(lat, lon);
+      
+      if (data.total_waypoints) {
+        routeProgress = data.waypoint_index / (data.total_waypoints - 1);
+        document.getElementById('scrubber').value = Math.round(routeProgress * 100);
+      }
+      
+      setModeHint(`Rover: ${status.toUpperCase()} | Charge: ${Math.round(battery)}%`);
+      
+      if (data.cumulative_distance_m !== undefined) {
+        document.getElementById('statDistance').textContent = `${(data.cumulative_distance_m / 1000).toFixed(2)} km`;
+      }
+      if (data.cumulative_energy_wh !== undefined) {
+        document.getElementById('statEnergy').textContent = `${Math.round(data.cumulative_energy_wh)} Wh`;
+      }
+      
+      render();
+
+      if (status === 'arrived') {
+        stopPlayback();
+        setModeHint('Rover arrived safely at destination.');
+      } else if (status === 'stalled') {
+        stopPlayback();
+        setModeHint('Rover stalled: path blocked or battery depleted.');
+      }
+    } catch (e) {
+      console.error("Error processing WS telemetry message:", e);
+    }
+  };
+
+  telemetryWS.onerror = (err) => {
+    console.error("WebSocket telemetry error:", err);
+    fallbackToLocalPlayback();
+  };
+
+  telemetryWS.onclose = () => {
+    console.log("Telemetry WebSocket closed.");
+    playing = false;
+    document.getElementById('playIcon').innerHTML = '<path d="M7 5v14l11-7L7 5Z" fill="currentColor"/>';
+  };
+}
+
+function fallbackToLocalPlayback() {
+  console.log("Falling back to local playback simulation.");
+  if (telemetryWS) {
+    telemetryWS.close();
+    telemetryWS = null;
+  }
+  playing = true;
+  document.getElementById('playIcon').innerHTML = '<rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/>';
+  tickPlayback();
+}
+
 document.getElementById('playBtn').addEventListener('click', () => {
   if (!activeRoute) return;
-  playing = !playing;
-  document.getElementById('playIcon').innerHTML = playing
-    ? '<rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/>'
-    : '<path d="M7 5v14l11-7L7 5Z" fill="currentColor"/>';
-  if (playing) tickPlayback();
+  if (playing) {
+    stopPlayback();
+  } else {
+    const firstCell = region.cells[0][0];
+    if (firstCell && firstCell.lat !== undefined && firstCell.lon !== undefined) {
+      startWSPlayback();
+    } else {
+      playing = true;
+      document.getElementById('playIcon').innerHTML = '<rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/>';
+      tickPlayback();
+    }
+  }
 });
+
 document.getElementById('resetBtn').addEventListener('click', () => {
   routeStart = null; routeEnd = null; activeRoute = null; routeProgress = 0;
   stopPlayback(); resetRouteStats();
   setModeHint('Click a start point, then an end point, on the map.');
   render();
 });
+
 document.getElementById('scrubber').addEventListener('input', (e) => {
   routeProgress = Number(e.target.value) / 100;
   render();
 });
+
 function stopPlayback() {
   playing = false;
   if (playRAF) cancelAnimationFrame(playRAF);
+  if (telemetryWS) {
+    telemetryWS.close();
+    telemetryWS = null;
+  }
   document.getElementById('playIcon').innerHTML = '<path d="M7 5v14l11-7L7 5Z" fill="currentColor"/>';
 }
+
 function tickPlayback() {
   if (!playing) return;
   routeProgress += 0.0035;
@@ -765,21 +1013,67 @@ function computeLMRS(gx, gy) {
   return { LMRS, RAI, CommVisibility, ThermalScore, ice, dist, energyWh, reachable, shadow: cell.shadow, cell: { x: gx, y: gy } };
 }
 
-function openLmrsFor(gx, gy) {
-  const result = computeLMRS(gx, gy);
-  if (!result) return;
-  lastLmrs = result; lastLmrsCell = { x: gx, y: gy };
+async function openLmrsFor(gx, gy) {
+  lastLmrsCell = { x: gx, y: gy };
+  
+  // Instant local calculation as preview & fallback
+  const localResult = computeLMRS(gx, gy);
+  if (localResult) {
+    lastLmrs = localResult;
+    updateLmrsUI(localResult);
+  }
+  
   const panel = document.getElementById('lmrsPanel');
   panel.classList.add('open');
+  
+  const cell = cellAt(gx, gy);
+  if (cell && cell.lat !== undefined && cell.lon !== undefined) {
+    try {
+      const isPredictive = document.getElementById('routePredictiveBattery')?.checked || false;
+      const url = `${BACKEND_BASE_URL}/api/lmrs?lat=${cell.lat}&lon=${cell.lon}&region_id=${currentRegionKey}&use_predictive_battery=${isPredictive}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP status ${res.status}`);
+      const data = await res.json();
+      
+      const backendResult = {
+        LMRS: Math.round(data.lmrs_score),
+        RAI: Math.round(data.rai.score),
+        CommVisibility: Math.round(data.comm_visibility.score),
+        ThermalScore: Math.round(data.thermal_risk.score),
+        ice: {
+          volume_m3: data.rai.ice_volume_m3,
+          depth_m: data.rai.ice_depth_m,
+          confidence: data.rai.confidence
+        },
+        dist: data.rai.nearest_ice_distance_m / 140,
+        energyWh: data.thermal_risk.energy_cost_wh,
+        reachable: data.thermal_risk.score > 2,
+        shadow: data.thermal_risk.dark_dwell_fraction > 0,
+        cell: { x: gx, y: gy }
+      };
+      
+      lastLmrs = backendResult;
+      updateLmrsUI(backendResult);
+    } catch (err) {
+      console.warn("Failed to fetch LMRS from backend, using local simulation values instead:", err);
+    }
+  }
+}
 
+function updateLmrsUI(result) {
   document.getElementById('lmrsScoreNum').textContent = result.LMRS;
   const ring = document.getElementById('lmrsRingFg');
   const circumference = 327;
   ring.style.strokeDashoffset = circumference - (result.LMRS / 100) * circumference;
 
-  const lat = -(89.9 - gy * 0.02).toFixed(3);
-  const lon = (gx * 0.035 - 0.7).toFixed(3);
-  document.getElementById('lmrsCoord').textContent = `${lat}°S, ${lon}°  ·  grid (${gx}, ${gy})`;
+  const cell = cellAt(result.cell.x, result.cell.y);
+  if (cell && cell.lat !== undefined && cell.lon !== undefined) {
+    document.getElementById('lmrsCoord').textContent = `${cell.lat.toFixed(4)}°S, ${cell.lon.toFixed(4)}°  ·  grid (${result.cell.x}, ${result.cell.y})`;
+  } else {
+    const lat = -(89.9 - result.cell.y * 0.02).toFixed(3);
+    const lon = (result.cell.x * 0.035 - 0.7).toFixed(3);
+    document.getElementById('lmrsCoord').textContent = `${lat}°S, ${lon}°  ·  grid (${result.cell.x}, ${result.cell.y})`;
+  }
 
   document.getElementById('barRAI').style.width = result.RAI + '%';
   document.getElementById('valRAI').textContent = result.RAI;
@@ -788,10 +1082,15 @@ function openLmrsFor(gx, gy) {
   document.getElementById('barThermal').style.width = result.ThermalScore + '%';
   document.getElementById('valThermal').textContent = result.ThermalScore;
 
-  document.getElementById('detIceVol').textContent = result.dist === 0 ? `${result.ice.volume_m3.toLocaleString()} m³` : `${result.ice.volume_m3.toLocaleString()} m³ (${Math.round(result.dist * 140)} m away)`;
+  if (result.dist === 0) {
+    document.getElementById('detIceVol').textContent = `${result.ice.volume_m3.toLocaleString()} m³`;
+  } else {
+    const distLabel = result.dist >= 99 ? 'far' : `${Math.round(result.dist * 140)} m away`;
+    document.getElementById('detIceVol').textContent = `${result.ice.volume_m3.toLocaleString()} m³ (${distLabel})`;
+  }
   document.getElementById('detIceDepth').textContent = `${result.ice.depth_m} m`;
   document.getElementById('detConfidence').textContent = `${Math.round(result.ice.confidence * 100)}%`;
-  document.getElementById('detEnergy').textContent = result.reachable ? `${result.energyWh} Wh` : 'No safe path found';
+  document.getElementById('detEnergy').textContent = result.reachable ? `${Math.round(result.energyWh)} Wh` : 'No safe path found';
   document.getElementById('detShadow').textContent = result.shadow ? 'Permanently shadowed (25 K)' : 'Sunlit';
 }
 
@@ -829,11 +1128,74 @@ document.getElementById('clearCompare').addEventListener('click', () => {
 document.getElementById('closeCompareDrawer').addEventListener('click', () => {
   document.getElementById('compareDrawer').hidden = true;
 });
-function renderCompareDrawer() {
+async function renderCompareDrawer() {
   const drawer = document.getElementById('compareDrawer');
   drawer.hidden = false;
-  const results = compareSet.map((c, i) => ({ i, c, r: computeLMRS(c.x, c.y) }));
-  const bestIdx = results.reduce((best, cur) => cur.r.LMRS > results[best].r.LMRS ? cur.i : best, 0);
+  
+  // Instant local simulation preview
+  const localResults = compareSet.map((c, i) => ({ i, c, r: computeLMRS(c.x, c.y) }));
+  const localBestIdx = localResults.reduce((best, cur) => cur.r.LMRS > localResults[best].r.LMRS ? cur.i : best, 0);
+  updateCompareTableUI(localResults, localBestIdx);
+  
+  const points = compareSet.map((c, i) => {
+    const cell = cellAt(c.x, c.y);
+    return {
+      lat: cell.lat !== undefined ? cell.lat : -(89.9 - c.y * 0.02),
+      lon: cell.lon !== undefined ? cell.lon : (c.x * 0.035 - 0.7),
+      label: `Site ${i + 1}`
+    };
+  });
+  
+  try {
+    const isPredictive = document.getElementById('routePredictiveBattery')?.checked || false;
+    const body = {
+      region_id: currentRegionKey,
+      points: points,
+      weights: null,
+      use_predictive_battery: isPredictive
+    };
+    
+    console.log("Sending comparison request to backend:", body);
+    const res = await fetch(`${BACKEND_BASE_URL}/api/lmrs/compare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    
+    if (!res.ok) throw new Error(`HTTP status ${res.status}`);
+    const data = await res.json();
+    
+    const results = data.results.map((resItem) => {
+      const index = parseInt(resItem.label.split(' ')[1]) - 1;
+      const pt = compareSet[index];
+      return {
+        i: index,
+        c: pt,
+        r: {
+          LMRS: Math.round(resItem.lmrs_score),
+          RAI: Math.round(resItem.rai.score),
+          CommVisibility: Math.round(resItem.comm_visibility.score),
+          ThermalScore: Math.round(resItem.thermal_risk.score),
+          ice: {
+            volume_m3: resItem.rai.ice_volume_m3,
+            depth_m: resItem.rai.ice_depth_m,
+            confidence: resItem.rai.confidence
+          },
+          reachable: resItem.thermal_risk.score > 2,
+          energyWh: resItem.thermal_risk.energy_cost_wh
+        }
+      };
+    });
+    
+    results.sort((a, b) => a.i - b.i);
+    const bestIdx = parseInt(data.recommended.split(' ')[1]) - 1;
+    updateCompareTableUI(results, bestIdx);
+  } catch (err) {
+    console.warn("Backend comparison failed, using local simulation values:", err);
+  }
+}
+
+function updateCompareTableUI(results, bestIdx) {
   const table = document.getElementById('compareTable');
   table.innerHTML = `
     <thead><tr>
@@ -850,7 +1212,7 @@ function renderCompareDrawer() {
           <td>${r.ThermalScore}</td>
           <td>${r.ice.volume_m3.toLocaleString()} m³</td>
           <td>${Math.round(r.ice.confidence * 100)}%</td>
-          <td>${r.reachable ? r.energyWh : '<span class="tag-unreachable">Unreachable</span>'}</td>
+          <td>${r.reachable ? Math.round(r.energyWh) : '<span class="tag-unreachable">Unreachable</span>'}</td>
           <td>${i === bestIdx ? '<span class="tag-best">★ Recommended</span>' : ''}</td>
         </tr>`).join('')}
     </tbody>`;
@@ -874,31 +1236,99 @@ function findSafeStart(candidates) {
 }
 
 
-function ensureSwarmRoutes(forceNew) {
+async function ensureSwarmRoutes(forceNew) {
   if (swarm.a.route && swarm.b.route && !forceNew) return;
-  const rng = mulberry32(Date.now() % 100000);
+  
+  const localRng = mulberry32(Date.now() % 100000);
   const startB = findSafeStart([
     { x: region.cols - 3, y: 2 }, { x: region.cols - 3, y: region.rows - 3 },
     { x: 2, y: region.rows - 3 }, { x: Math.floor(region.cols / 2), y: 1 },
   ]);
-
-  // retry target selection a bounded number of times so the swarm demo
-  // never silently shows a stalled rover with no route
-  let routeA = null, routeB = null, targetA = null, targetB = null, tries = 0;
-  while ((!routeA || !routeB) && tries++ < 25) {
-    targetA = pickIceTarget(rng);
-    targetB = pickIceTarget(rng);
-    if (targetA.x === targetB.x && targetA.y === targetB.y) continue;
-    routeA = buildRoute(region.landing, targetA);
-    routeB = buildRoute(startB, targetB);
+  
+  let success = false;
+  const cellLZ = cellAt(region.landing.x, region.landing.y);
+  const cellStartB = cellAt(startB.x, startB.y);
+  
+  if (cellLZ && cellLZ.lat !== undefined && cellLZ.lon !== undefined && cellStartB) {
+    try {
+      const isPredictive = document.getElementById('routePredictiveBattery')?.checked || false;
+      const targetA = pickIceTarget(localRng);
+      const targetB = pickIceTarget(localRng);
+      const cellTargetA = cellAt(targetA.x, targetA.y);
+      const cellTargetB = cellAt(targetB.x, targetB.y);
+      
+      const body = {
+        region_id: currentRegionKey,
+        rovers: [
+          {
+            rover_id: 'rover-a',
+            start_lat: cellLZ.lat,
+            start_lon: cellLZ.lon,
+            end_lat: cellTargetA.lat,
+            end_lon: cellTargetA.lon,
+            initial_battery_pct: 100.0,
+            ice_seeking: false
+          },
+          {
+            rover_id: 'rover-b',
+            start_lat: cellStartB.lat !== undefined ? cellStartB.lat : -(89.9 - startB.y * 0.02),
+            start_lon: cellStartB.lon !== undefined ? cellStartB.lon : (startB.x * 0.035 - 0.7),
+            end_lat: cellTargetB.lat,
+            end_lon: cellTargetB.lon,
+            initial_battery_pct: 100.0,
+            ice_seeking: true
+          }
+        ],
+        dark_budget_wh: 80.0,
+        shadow_penalty_weight: 5.0,
+        use_predictive_battery: isPredictive
+      };
+      
+      console.log("Planning swarm via backend:", body);
+      const res = await fetch(`${BACKEND_BASE_URL}/api/swarm/plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      
+      if (!res.ok) throw new Error(`HTTP status ${res.status}`);
+      const data = await res.json();
+      
+      const planA = data.plans.find(p => p.rover_id === 'rover-a');
+      const planB = data.plans.find(p => p.rover_id === 'rover-b');
+      
+      if (planA && planA.route_found && planB && planB.route_found) {
+        swarm.a.route = mapBackendRouteToFrontend(planA);
+        swarm.b.route = mapBackendRouteToFrontend(planB);
+        swarm.a.progress = 0; swarm.b.progress = 0;
+        document.getElementById('swarmABattery').textContent = '100%';
+        document.getElementById('swarmBBattery').textContent = '100%';
+        render();
+        success = true;
+        console.log("Swarm routing completed successfully via backend.");
+      }
+    } catch (err) {
+      console.warn("Backend swarm planning failed, using local simulation:", err);
+    }
   }
+  
+  if (!success) {
+    let routeA = null, routeB = null, targetA = null, targetB = null, tries = 0;
+    while ((!routeA || !routeB) && tries++ < 25) {
+      targetA = pickIceTarget(localRng);
+      targetB = pickIceTarget(localRng);
+      if (targetA.x === targetB.x && targetA.y === targetB.y) continue;
+      routeA = buildRoute(region.landing, targetA);
+      routeB = buildRoute(startB, targetB);
+    }
 
-  swarm.a.route = routeA;
-  swarm.b.route = routeB;
-  swarm.a.progress = 0; swarm.b.progress = 0;
-  document.getElementById('swarmABattery').textContent = '100%';
-  document.getElementById('swarmBBattery').textContent = '100%';
-  render();
+    swarm.a.route = routeA;
+    swarm.b.route = routeB;
+    swarm.a.progress = 0; swarm.b.progress = 0;
+    document.getElementById('swarmABattery').textContent = '100%';
+    document.getElementById('swarmBBattery').textContent = '100%';
+    render();
+  }
 }
 document.getElementById('rerollSwarm').addEventListener('click', () => ensureSwarmRoutes(true));
 document.getElementById('swarmPlayBtn').addEventListener('click', (e) => {
@@ -980,6 +1410,45 @@ function answerCopilot(qRaw) {
   return `I can answer questions about hazards, the LMRS score, route energy cost, ice volume/depth, or detection confidence for whatever you've selected on the map — try one of the suggested questions below.`;
 }
 
+async function askCopilot(question) {
+  let success = false;
+  let contextPoint = null;
+  
+  if (lastLmrsCell) {
+    const cell = cellAt(lastLmrsCell.x, lastLmrsCell.y);
+    if (cell && cell.lat !== undefined && cell.lon !== undefined) {
+      contextPoint = { lat: cell.lat, lon: cell.lon };
+    }
+  }
+  
+  try {
+    const body = {
+      region_id: currentRegionKey,
+      question: question,
+      context_point: contextPoint
+    };
+    
+    console.log("Sending copilot question to backend:", body);
+    const res = await fetch(`${BACKEND_BASE_URL}/api/copilot/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    
+    if (!res.ok) throw new Error(`HTTP status ${res.status}`);
+    const data = await res.json();
+    
+    pushMessage(data.answer, 'bot');
+    success = true;
+  } catch (err) {
+    console.warn("Backend copilot query failed, using offline rule templates:", err);
+  }
+  
+  if (!success) {
+    setTimeout(() => pushMessage(answerCopilot(question), 'bot'), 380);
+  }
+}
+
 document.getElementById('copilotForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = document.getElementById('copilotInput');
@@ -987,12 +1456,12 @@ document.getElementById('copilotForm').addEventListener('submit', (e) => {
   if (!val) return;
   pushMessage(val, 'user');
   input.value = '';
-  setTimeout(() => pushMessage(answerCopilot(val), 'bot'), 380);
+  askCopilot(val);
 });
 document.querySelectorAll('.chip-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     pushMessage(btn.textContent, 'user');
-    setTimeout(() => pushMessage(answerCopilot(btn.textContent), 'bot'), 380);
+    askCopilot(btn.textContent);
   });
 });
 
@@ -1009,9 +1478,94 @@ setInterval(() => {
   if (el) el.textContent = `T+${h}:${m}:${s}`;
 }, 1000);
 
-function loadRegion(key) {
+async function populateRegions() {
+  const select = document.getElementById('regionSelect');
+  try {
+    const res = await fetch(`${BACKEND_BASE_URL}/api/regions`);
+    if (!res.ok) throw new Error(`HTTP status ${res.status}`);
+    const data = await res.json();
+    
+    select.innerHTML = '';
+    data.regions.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.region_id;
+      opt.textContent = `${r.display_name} (${r.grid_size})`;
+      REGION_LABELS[r.region_id] = r.display_name;
+      REGION_SEEDS[r.region_id] = 1337;
+      select.appendChild(opt);
+    });
+    
+    if (data.regions.length > 0) {
+      currentRegionKey = data.regions[0].region_id;
+      select.value = currentRegionKey;
+    }
+  } catch (err) {
+    console.warn("Failed to load regions list from backend, using default static list:", err);
+  }
+}
+
+async function loadRegion(key) {
   currentRegionKey = key;
-  region = generateRegion(key);
+  try {
+    console.log(`Fetching grid for region ${key}...`);
+    const res = await fetch(`${BACKEND_BASE_URL}/api/regions/${key}/grid`);
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    const data = await res.json();
+    
+    GRID_ROWS = data.rows;
+    GRID_COLS = data.cols;
+    
+    const cells = Array.from({ length: data.rows }, () => []);
+    data.cells.forEach(c => {
+      let elevation = 0.5;
+      if (c.is_hazard) elevation = 0.8;
+      else if (c.is_shadowed) elevation = 0.2;
+      
+      cells[c.row][c.col] = {
+        x: c.col,
+        y: c.row,
+        lat: c.lat,
+        lon: c.lon,
+        elevation: elevation,
+        shadow: c.is_shadowed,
+        hazard: c.is_hazard,
+        boulder: c.is_hazard,
+        ice: c.ice_volume_m3 > 0 ? {
+          volume_m3: c.ice_volume_m3,
+          depth_m: (1 + c.ice_confidence * 4).toFixed(1),
+          confidence: c.ice_confidence
+        } : null
+      };
+    });
+    
+    region = {
+      key: key,
+      cells: cells,
+      cols: data.cols,
+      rows: data.rows,
+      landing: { x: 0, y: 0 },
+      label: REGION_LABELS[key] || key
+    };
+    
+    let LZ = null;
+    for (let r = 0; r < data.rows; r++) {
+      for (let c = 0; c < data.cols; c++) {
+        if (!cells[r][c].hazard && !cells[r][c].shadow) {
+          LZ = { x: c, y: r };
+          break;
+        }
+      }
+      if (LZ) break;
+    }
+    region.landing = LZ || { x: 0, y: 0 };
+    console.log(`Region ${key} grid loaded successfully from backend. LZ at:`, region.landing);
+  } catch (err) {
+    console.warn(`Failed to fetch region ${key} grid from backend, falling back to local simulation:`, err);
+    GRID_ROWS = 28;
+    GRID_COLS = 46;
+    region = generateRegion(key);
+  }
+
   buildTerrainNoise();
   routeStart = null; routeEnd = null; activeRoute = null; routeProgress = 0;
   compareSet = []; swarm.a.route = null; swarm.b.route = null;
@@ -1023,4 +1577,9 @@ function loadRegion(key) {
   resizeCanvas();
 }
 
-loadRegion('shackleton');
+async function boot() {
+  await populateRegions();
+  await loadRegion(currentRegionKey);
+}
+
+boot();
