@@ -32,7 +32,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -156,7 +156,7 @@ def create_app() -> FastAPI:
     )
 
     # ── CORS ─────────────────────────────────────────────────────────────────
-    cors_origins_raw = os.getenv("ASTRANAV_CORS_ORIGINS", "http://localhost:3000")
+    cors_origins_raw = os.getenv("ASTRANAV_CORS_ORIGINS", "http://localhost:5500,http://127.0.0.1:5500,http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000")
     cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
 
     app.add_middleware(
@@ -196,6 +196,43 @@ def create_app() -> FastAPI:
                 }
                 for cfg in REGION_REGISTRY.values()
             ]
+        }
+
+    @app.get("/api/regions/{region_id}/grid", tags=["Meta"], summary="Get region grid data")
+    async def get_region_grid(region_id: str, request: Request) -> dict[str, object]:
+        from data.region_registry import get_region_config
+        try:
+            cfg = get_region_config(region_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        
+        cache = request.app.state.grid_cache
+        try:
+            grid = await cache.get(region_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        cells_data = []
+        for r in range(grid.rows):
+            for c in range(grid.cols):
+                cell = grid.get_cell(r, c)
+                cells_data.append({
+                    "row": cell.row,
+                    "col": cell.col,
+                    "lat": cell.lat,
+                    "lon": cell.lon,
+                    "is_hazard": cell.is_hazard,
+                    "is_shadowed": cell.is_shadowed,
+                    "temperature_k": cell.temperature_k,
+                    "ice_volume_m3": cell.ice_volume_m3,
+                    "ice_confidence": cell.ice_confidence,
+                })
+
+        return {
+            "region_id": region_id,
+            "rows": grid.rows,
+            "cols": grid.cols,
+            "cells": cells_data
         }
 
     @app.get("/api/cache/status", tags=["Meta"], summary="Grid cache status")

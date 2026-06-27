@@ -197,7 +197,17 @@ async def telemetry_stream(
                 timestamp=_utc_now(),
             )
 
-            await websocket.send_json(frame.model_dump())
+            # Inject the strict nested structure required by the integration phase
+            payload = frame.model_dump()
+            payload["timestamp"] = int(datetime.now(timezone.utc).timestamp() * 1000)
+            payload["rover"] = {
+                "lat": wp.lat,
+                "lon": wp.lon,
+                "battery": wp.battery_pct_remaining,
+                "status": status,
+            }
+
+            await websocket.send_json(payload)
 
             # Pause at pitstop cells for `pitstop_dwell_s` extra seconds
             dwell = tick_interval_s + (pitstop_dwell_s if is_pitstop else 0.0)
@@ -245,7 +255,13 @@ async def _send_and_close(
             "total_waypoints": 0,
             "cumulative_distance_m": 0.0,
             "cumulative_energy_wh": 0.0,
-            "timestamp": _utc_now(),
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+            "rover": {
+                "lat": 0.0,
+                "lon": 0.0,
+                "battery": 0.0,
+                "status": status,
+            },
             "error": error_msg,
         }
         await websocket.send_json(frame)
