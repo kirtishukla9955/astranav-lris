@@ -111,3 +111,71 @@ class ExplainResponse(BaseModel):
 class RouteConfidenceResponse(BaseModel):
     region_id: str
     grid_confidence: List[Dict[str, float]] # List of {"lat": x, "lon": y, "confidence": c}
+
+# ==========================================
+# FEATURE A: ILLUMINATION TIMELAPSE SCHEMAS
+# ==========================================
+
+class IlluminationCell(BaseModel):
+    lat: float
+    lon: float
+    illumination_pct: float = Field(..., ge=0, le=100)
+    is_pitstop_eligible: bool
+
+class IlluminationFrame(BaseModel):
+    timestep: int
+    sun_angle_deg: float  # 0-360 degrees azimuth of the simulated sun
+
+    cells: List[IlluminationCell]
+
+class IlluminationTimelapseResponse(BaseModel):
+    region_id: str
+    duration_hours: float
+    num_frames: int
+    frames: List[IlluminationFrame]
+
+# ==========================================
+# FEATURE B: MISSION SNAPSHOT SCHEMAS
+# ==========================================
+
+class MissionSnapshotResponse(BaseModel):
+    region_id: str
+    snapshot_timestamp: str          # ISO-8601 UTC string
+    ice_layer: IceLayerData          # MOCK DATA - swap with Member 1 real data
+    hazard_summary: Dict[str, float] # slope_mean, slope_max, obstacle_pct, shadow_pct
+    route: RouteResponse
+    lmrs: LMRSResponse
+    route_confidence: RouteConfidenceResponse
+
+# ==========================================
+# FEATURE C: MISSION REPORT SCHEMAS
+# ==========================================
+
+class HazardSummary(BaseModel):
+    slope_mean_deg: float
+    slope_max_deg: float
+    obstacle_cell_pct: float   # percentage of sampled cells that are impassable
+    shadow_cell_pct: float     # percentage of sampled cells in permanent shadow
+
+class MissionReportData(BaseModel):
+    region_id: str
+    generated_at: str          # ISO-8601 UTC string
+    lat: float
+    lon: float
+    lmrs: LMRSResponse
+    ice_layer: IceLayerData    # MOCK DATA - swap with Member 1 real data
+    hazard_summary: HazardSummary
+    waypoints: List[Waypoint]
+    total_distance_m: float
+    total_energy_wh: float
+
+# ==========================================
+# FEATURE D: MISSION BRIEFING SCHEMAS
+# ==========================================
+
+class MissionBriefingResponse(BaseModel):
+    lat: float
+    lon: float
+    region_id: str
+    briefing_text: str
+    generated_by: Literal["llm", "fallback_template"]
