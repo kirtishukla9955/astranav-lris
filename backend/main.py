@@ -42,6 +42,7 @@ from api.routes import telemetry as telemetry_router
 from api.routes import battery_model as battery_router
 from api.routes import copilot as copilot_router
 from api.routes import fault_replan as fault_replan_router
+from api.routes import features as features_router
 from core.grid_cache import GridCache
 from data.region_registry import REGION_REGISTRY
 from ml.battery_model import load_ml_model
@@ -175,6 +176,7 @@ def create_app() -> FastAPI:
     app.include_router(battery_router.router)      # Step 5: ML battery model info
     app.include_router(copilot_router.router)
     app.include_router(fault_replan_router.router)      # Step 6: Chat copilot
+    app.include_router(features_router.router)
 
     # ── Health / meta endpoints ───────────────────────────────────────────────
 
