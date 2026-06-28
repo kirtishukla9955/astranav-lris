@@ -311,3 +311,73 @@
   .btn-sm{padding:8px 10px;}
 }
 
+/* ---------------- CONTINGENCY & MISSION HEALTH STYLES ---------------- */
+.health-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.3s ease;
+}
+.tag-green {
+  background: #05cf9b;
+  color: #06080f;
+  box-shadow: 0 0 8px rgba(5, 207, 155, 0.4);
+}
+.tag-yellow {
+  background: #ffb255;
+  color: #06080f;
+  box-shadow: 0 0 8px rgba(255, 178, 85, 0.4);
+}
+.tag-red {
+  background: #ff6b5e;
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 107, 94, 0.5);
+}
+
+.tooltip-trigger {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.tooltip-trigger:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: var(--ice) !important;
+  border-color: var(--ice) !important;
+}
+
+#contTimelineLog::-webkit-scrollbar {
+  width: 4px;
+}
+#contTimelineLog::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 2px;
+}
+#contTimelineLog::-webkit-scrollbar-thumb {
+  background: rgba(255, 107, 94, 0.3);
+  border-radius: 2px;
+}
+#contTimelineLog::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 107, 94, 0.5);
+}
+
+.timeline-event {
+  border-left: 1px solid rgba(255, 107, 94, 0.3);
+  padding-left: 8px;
+  margin-left: 4px;
+  position: relative;
+}
+.timeline-event::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #ff6b5e;
+  box-shadow: 0 0 4px #ff6b5e;
+}
+
+
