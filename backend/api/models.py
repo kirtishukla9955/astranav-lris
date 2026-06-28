@@ -288,3 +288,76 @@ class CopilotResponse(BaseModel):
 class ErrorDetail(BaseModel):
     detail: str
     reason: Optional[str] = None
+
+
+# ===========================================================================
+# Teammate Integrated Features
+# ===========================================================================
+
+class IceLayerData(BaseModel):
+    lat: float
+    lon: float
+    ice_volume_m3: float = Field(..., description="Estimated ice volume in cubic meters")
+    ice_depth_m: float = Field(..., description="Estimated depth of ice in meters")
+    confidence: float = Field(..., ge=0, le=1, description="Detection confidence (0-1)")
+
+class RouteConfidenceResponse(BaseModel):
+    region_id: str
+    grid_confidence: list[dict[str, float]] # List of {"lat": x, "lon": y, "confidence": c}
+
+class IlluminationCell(BaseModel):
+    lat: float
+    lon: float
+    illumination_pct: float = Field(..., ge=0, le=100)
+    is_pitstop_eligible: bool
+
+class IlluminationFrame(BaseModel):
+    timestep: int
+    sun_angle_deg: float
+    cells: list[IlluminationCell]
+
+class IlluminationTimelapseResponse(BaseModel):
+    region_id: str
+    duration_hours: float
+    num_frames: int
+    frames: list[IlluminationFrame]
+
+class MissionSnapshotResponse(BaseModel):
+    region_id: str
+    snapshot_timestamp: str          # ISO-8601 UTC string
+    ice_layer: IceLayerData          # MOCK DATA
+    hazard_summary: dict[str, float] # slope_mean, slope_max, obstacle_pct, shadow_pct
+    route: RouteResponse
+    lmrs: LMRSResponse
+    route_confidence: RouteConfidenceResponse
+
+class HazardSummary(BaseModel):
+    slope_mean_deg: float
+    slope_max_deg: float
+    obstacle_cell_pct: float   # percentage of sampled cells that are impassable
+    shadow_cell_pct: float     # percentage of sampled cells in permanent shadow
+
+class MissionReportData(BaseModel):
+    region_id: str
+    generated_at: str          # ISO-8601 UTC string
+    lat: float
+    lon: float
+    lmrs: LMRSResponse
+    ice_layer: IceLayerData
+    hazard_summary: HazardSummary
+    waypoints: list[WaypointOut]
+    total_distance_m: float
+    total_energy_wh: float
+
+class MissionBriefingResponse(BaseModel):
+    lat: float
+    lon: float
+    region_id: str
+    briefing_text: str
+    briefing: str
+    generated_by: Literal["llm", "fallback_template"]
+
+class MissionBriefingRequest(BaseModel):
+    lmrs: LMRSResponse
+    route: Optional[RouteResponse] = None
+
