@@ -92,3 +92,127 @@ async def websocket_telemetry(websocket: WebSocket, region_id: str):
             await websocket.send_json(telemetry_point)
     except WebSocketDisconnect:
         print(f"Client disconnected from region {region_id}")
+@app.get("/api/illumination-timelapse", response_model=IlluminationTimelapseResponse)
+async def get_illumination_timelapse(
+    region_id: str,
+    num_frames: int = 100,
+):  num_frames = max(1, min(num_frames, 500))
+    return simulate_illumination(
+        grid=GLOBAL_GRID,
+        region_id=region_id,
+        num_frames=num_frames,
+    )
+@app.get("/api/health")
+async def health_check():
+  
+    return {
+        "status": "ok",
+        "region_ids_available": KNOWN_REGION_IDS,
+    }
+
+
+@app.get("/api/mission-snapshot", response_model=MissionSnapshotResponse)
+async def get_mission_snapshot(region_id: str):
+    
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    target_lat = (GLOBAL_GRID.height // 2) * 0.0001
+    target_lon = (GLOBAL_GRID.width  // 2) * 0.0001
+
+    route = build_route(GLOBAL_GRID, (0, 0), (99, 99), region_id)
+    if route:
+        apply_confidence_to_route(route)
+    else:
+        route = RouteResponse(
+            route_id="no-route",
+            region_id=region_id,
+            waypoints=[],
+            total_distance_m=0.0,
+            total_energy_wh=0.0,
+        )
+
+    lmrs = compute_lmrs(
+        target_lat=target_lat,
+        target_lon=target_lon,
+        start_lat=0.0,
+        start_lon=0.0,
+        region_id=region_id,
+        grid=GLOBAL_GRID,
+    )
+
+    ice_layer = IceLayerData(
+        lat=target_lat,
+        lon=target_lon,
+        ice_volume_m3=800.0,
+        ice_depth_m=1.5,
+        confidence=0.85,
+    )
+
+    import math as _math
+    import numpy as _np
+    slopes, obstacles, shadows = [], 0, 0
+    stride = 5
+    total = 0
+    for gy in range(0, GLOBAL_GRID.height, stride):
+        for gx in range(0, GLOBAL_GRID.width, stride):
+            cost = GLOBAL_GRID.get_traversal_cost(gx, gy)
+            total += 1
+            if cost == float("inf"):
+                obstacles += 1
+                slopes.append(35.0)
+            else:
+                slopes.append(_math.sqrt(max(0.0, (cost - 1.0) * 100.0)))
+            if GLOBAL_GRID.is_in_shadow(gx, gy):
+                shadows += 1
+
+    slopes_arr = _np.array(slopes, dtype=float)
+    hazard_summary = {
+        "slope_mean": round(float(_np.mean(slopes_arr)), 2),
+        "slope_max":  round(float(_np.max(slopes_arr)), 2),
+        "obstacle_pct": round(obstacles / total * 100.0, 2),
+        "shadow_pct":   round(shadows  / total * 100.0, 2),
+    }
+    conf_data = generate_grid_confidence(GLOBAL_GRID.width, GLOBAL_GRID.height)
+    route_confidence = RouteConfidenceResponse(
+        region_id=region_id,
+        grid_confidence=conf_data,
+    )
+
+    return MissionSnapshotResponse(
+        region_id=region_id,
+        snapshot_timestamp=timestamp,
+        ice_layer=ice_layer,
+        hazard_summary=hazard_summary,
+        route=route,
+        lmrs=lmrs,
+        route_confidence=route_confidence,
+    )
+  @app.get("/api/export/csv")
+async def export_csv(region_id: str, lat: float, lon: float):
+
+    data: MissionReportData = assemble_report_data(lat, lon, region_id, GLOBAL_GRID)
+    csv_str = to_csv(data)
+    filename = f"astranav_mission_{region_id}_{lat:.4f}_{lon:.4f}.csv"
+    return StreamingResponse(
+        iter([csv_str]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+@app.get("/api/export/pdf")
+async def export_pdf(region_id: str, lat: float, lon: float): 
+    data: MissionReportData = assemble_report_data(lat, lon, region_id, GLOBAL_GRID)
+    pdf_bytes = to_pdf(data)
+    filename = f"astranav_mission_{region_id}_{lat:.4f}_{lon:.4f}.pdf"
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    ) 
+ @app.get("/api/mission-briefing", response_model=MissionBriefingResponse)
+async def get_mission_briefing(lat: float, lon: float, region_id: str):
+    return generate_mission_briefing(
+        lat=lat,
+        lon=lon,
+        region_id=region_id,
+        grid=GLOBAL_GRID,
+    )
