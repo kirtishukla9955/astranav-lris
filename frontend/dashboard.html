@@ -129,6 +129,58 @@
         <span class="rail-subtitle">Predicted Battery (ML model)</span>
         <canvas id="batteryChart" height="70"></canvas>
       </div>
+
+      <!-- --- MISSION ANOMALY HEALTH DASHBOARD START --- -->
+      <div class="contingency-health-dash" style="margin-top: 15px; border-top: 1px solid var(--hairline); padding-top: 12px;">
+        <span class="rail-subtitle">Rover System Health</span>
+        <div class="health-indicators mono" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.74rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Battery Status:</span>
+            <span class="health-tag tag-green" id="healthBattery">NOMINAL</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Actuators/Drive:</span>
+            <span class="health-tag tag-green" id="healthDrive">NOMINAL</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Sensors/Slopes:</span>
+            <span class="health-tag tag-green" id="healthSensors">NOMINAL</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Earth Link Comms:</span>
+            <span class="health-tag tag-green" id="healthComms">NOMINAL</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Thermal Load:</span>
+            <span class="health-tag tag-green" id="healthThermal">NOMINAL</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Anomaly Trigger -->
+      <div class="contingency-trigger-panel" style="margin-top: 15px; border-top: 1px solid var(--hairline); padding-top: 12px;">
+        <span class="rail-subtitle">Mission Anomaly Response</span>
+        <select id="anomalySelect" class="region-select" style="width: 100%; margin-bottom: 8px;">
+          <option value="wheel_degradation">Wheel Actuator Degradation</option>
+          <option value="battery_drain">Battery Cell Degradation</option>
+          <option value="sensor_degradation">Sensor Degradation (Terrain Blindness)</option>
+          <option value="comm_blackout">Communication Blackout</option>
+          <option value="new_obstacle">Newly Detected Obstacle (Boulder)</option>
+          <option value="thermal_load">PSR Thermal Load Spike</option>
+          <option value="solar_unavailable">Solar Charging Site Blocked</option>
+        </select>
+        <div style="margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--slate-dim); margin-bottom: 4px;">
+            <span>Anomaly Severity</span>
+            <span id="anomalyMagVal" class="mono">40%</span>
+          </div>
+          <input type="range" id="anomalyMagnitude" min="10" max="90" value="40" class="scrubber" style="width: 100%;">
+        </div>
+        <button class="icon-btn-wide" id="injectAnomalyBtn" style="background: linear-gradient(135deg, #ff6b5e, #ffe28a); color: #101010; font-weight: 700; margin-top: 6px; box-shadow: 0 4px 15px rgba(255, 107, 94, 0.45); cursor: pointer;">
+          ⚠ TRIGGER CONTINGENCY
+        </button>
+      </div>
+      <!-- --- END --- -->
     </div>
 
     <div class="rail-block" id="compareControls" hidden>
@@ -238,6 +290,84 @@
 
   </aside>
 
+  <!-- ===== RIGHT SLIDE-OUT: CONTINGENCY PANEL ===== -->
+  <aside class="lmrs-panel contingency-theme" id="contingencyPanel" style="border-left: 1px solid #ff6b5e; background: rgba(15, 6, 6, 0.95); z-index: 61;">
+    <div class="lmrs-head">
+      <span class="rail-title" style="color: #ff6b5e; display: flex; align-items: center; gap: 6px;">
+        <span class="dot-pulse" style="background-color: #ff6b5e; box-shadow: 0 0 6px #ff6b5e;"></span> CONTINGENCY REPORT
+      </span>
+      <button class="icon-btn" id="closeContingency" style="border-color: rgba(255,107,94,0.3); color: #ff6b5e; font-size: 0.8rem; cursor: pointer;">✕</button>
+    </div>
+
+    <!-- Explanation Panel -->
+    <div class="contingency-explanation" style="margin-bottom: 20px; font-family: var(--font-body); font-size: 0.84rem; line-height: 1.45;">
+      <div style="background: rgba(255,107,94,0.08); border: 1px solid rgba(255,107,94,0.25); border-radius: 8px; padding: 12px;">
+        <span class="rail-subtitle" style="color: #ff6b5e; font-weight: 700; margin-bottom: 6px; display: block; letter-spacing: 0.05em;">AI RECOVERY LOGIC</span>
+        <div style="margin-bottom: 10px;">
+          <b style="color: var(--ice); font-size: 0.72rem; letter-spacing: 0.03em;">ANOMALY RESOLUTION</b>
+          <p id="contReason" style="color: #ffe28a; margin: 4px 0 0 0; font-size: 0.78rem; font-family: var(--font-body);"></p>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <b style="color: var(--ice); font-size: 0.72rem; letter-spacing: 0.03em;">SYSTEM EFFECTS</b>
+          <p id="contEffects" style="color: var(--slate); margin: 4px 0 0 0; font-size: 0.78rem; font-family: var(--font-body);"></p>
+        </div>
+        <div>
+          <b style="color: var(--ice); font-size: 0.72rem; letter-spacing: 0.03em;">AUTONOMOUS RESPONSE</b>
+          <p id="contDecisions" style="color: var(--cyan); margin: 4px 0 0 0; font-size: 0.78rem; font-family: var(--font-body);"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Before vs After Metrics -->
+    <div class="contingency-comparison" style="margin-bottom: 20px;">
+      <span class="rail-subtitle" style="color: var(--slate-dim); display: block; margin-bottom: 8px;">Plan Modification Metrics</span>
+      
+      <!-- Operational Confidence Index (OCI) with Tooltip -->
+      <div style="background: var(--panel); border: 1px solid var(--hairline-soft); border-radius: 8px; padding: 10px; margin-bottom: 12px; position: relative;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <span style="font-size: 0.74rem; color: var(--slate); font-weight: 500; display: flex; align-items: center; gap: 6px;">
+            Operational Confidence Index
+            <span class="tooltip-trigger" style="display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--slate-dim); font-size: 0.6rem; cursor: help; color: var(--slate-dim);" title="A deterministic weighted metric derived from battery reserve, hazard exposure, comms link, and slope risk to support real-time planning decisions. Not statistically validated.">?</span>
+          </span>
+          <span class="mono" style="font-size: 0.84rem; font-weight: bold; color: var(--cyan);" id="ociDiff">-12.0%</span>
+        </div>
+        <!-- Progress compare -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.78rem;" class="mono">
+          <div><span style="color: var(--slate-dim); font-size: 0.65rem;">ORIGINAL</span><div id="ociBefore" style="color: var(--slate);">92.0%</div></div>
+          <div><span style="color: #ff6b5e; font-size: 0.65rem;">RECOVERY</span><div id="ociAfter" style="color: #ffe28a; font-weight: bold;">80.0%</div></div>
+        </div>
+      </div>
+
+      <!-- Other metrics -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;" class="mono">
+        <div style="background: var(--panel); border: 1px solid var(--hairline-soft); border-radius: 8px; padding: 8px; font-size: 0.78rem;">
+          <span style="color: var(--slate-dim); font-size: 0.65rem; display: block; margin-bottom: 2px;">ETA TRAVEL TIME</span>
+          <div style="color: var(--ice); font-weight: 500;" id="etaCompare">24.5 min → 38.0 min</div>
+        </div>
+        <div style="background: var(--panel); border: 1px solid var(--hairline-soft); border-radius: 8px; padding: 8px; font-size: 0.78rem;">
+          <span style="color: var(--slate-dim); font-size: 0.65rem; display: block; margin-bottom: 2px;">BATTERY REMAINING</span>
+          <div style="color: var(--ice); font-weight: 500;" id="battCompare">74% → 85%</div>
+        </div>
+        <div style="background: var(--panel); border: 1px solid var(--hairline-soft); border-radius: 8px; padding: 8px; font-size: 0.78rem;">
+          <span style="color: var(--slate-dim); font-size: 0.65rem; display: block; margin-bottom: 2px;">ENERGY USAGE</span>
+          <div style="color: var(--ice); font-weight: 500;" id="energyCompare">38.5 Wh → 54.2 Wh</div>
+        </div>
+        <div style="background: var(--panel); border: 1px solid var(--hairline-soft); border-radius: 8px; padding: 8px; font-size: 0.78rem;">
+          <span style="color: var(--slate-dim); font-size: 0.65rem; display: block; margin-bottom: 2px;">RISK EXPOSURE</span>
+          <div style="color: var(--ice); font-weight: 500;" id="riskCompare">21.0 → 12.0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live timeline log -->
+    <div class="contingency-timeline" style="margin-top: 15px; border-top: 1px solid var(--hairline); padding-top: 12px;">
+      <span class="rail-subtitle" style="color: var(--slate-dim); display: block; margin-bottom: 10px;">Contingency Timeline Log</span>
+      <div id="contTimelineLog" class="mono" style="display: flex; flex-direction: column; gap: 8px; font-size: 0.7rem; color: var(--slate); max-height: 180px; overflow-y: auto; padding-right: 4px;">
+        <!-- Filled dynamically -->
+      </div>
+    </div>
+  </aside>
+
   <!-- ===== BOTTOM DRAWER: COMPARISON TABLE ===== -->
   <div class="compare-drawer" id="compareDrawer" hidden>
     <div class="drawer-head">
@@ -277,6 +407,7 @@
 
 <script src="assets/jspdf.umd.min.js"></script>
 <script src="dashboard.js"></script>
+<script src="fault_injector.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
