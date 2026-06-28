@@ -9,6 +9,7 @@
     content="AstraNav-LRIS detects subsurface lunar ice from Chandrayaan-2 data and plans thermal-aware rover routes through the Moon's permanently shadowed south polar craters." />
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22%2304050a%22 stroke=%22%2334e8ec%22 stroke-width=%224%22/></svg>">
+  <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -561,6 +562,13 @@
 
   <script src="assets/three.min.js"></script>
   <script src="script.js"></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js');
+      });
+    }
+  </script>
 </body>
 
 </html>

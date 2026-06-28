@@ -6,6 +6,7 @@
 <title>Mission Control — AstraNav-LRIS</title>
 <meta name="description" content="AstraNav-LRIS Mission Control — live ice detection, hazard mapping, shadow-hopping route planning and readiness scoring for the lunar south pole." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22%2304050a%22 stroke=%22%2334e8ec%22 stroke-width=%224%22/></svg>">
+<link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -34,6 +35,7 @@
   </div>
   <div class="dtop-center mono">
     <span class="dtop-stat"><span class="dot-pulse"></span> LIVE SIM</span>
+    <span class="dtop-stat" id="networkStatus" style="color:var(--cyan);">ONLINE</span>
     <span class="dtop-stat" id="cursorReadout">LAT — · LON —</span>
     <span class="dtop-stat" id="clockReadout">T+00:00:00</span>
   </div>
@@ -69,6 +71,21 @@
         <input type="checkbox" id="layerRoute" checked>
         <span class="swatch swatch-route"></span> Route &amp; Telemetry
       </label>
+    </div>
+
+
+    <div class="rail-block" id="timeLapseControls">
+      <h4 class="rail-title">Solar Time-Lapse</h4>
+      <div class="playback-row">
+        <button class="icon-btn" id="sunPlayBtn" title="Play/Pause Sun">
+          <svg id="sunPlayIcon" viewBox="0 0 24 24" fill="none"><path d="M7 5v14l11-7L7 5Z" fill="currentColor"/></svg>
+        </button>
+        <input type="range" id="sunScrubber" min="0" max="360" value="0" class="scrubber">
+        <button class="btn btn-outline btn-sm" id="sunSpeedBtn" style="padding: 0 6px; height: 34px; font-family: var(--font-mono); font-size: 0.7rem;">1x</button>
+      </div>
+      <div class="rail-hint mono" style="margin-top: 8px;">
+        Pitstop Window: <b id="pitstopStatus" style="color:var(--slate);">N/A</b>
+      </div>
     </div>
 
     <div class="rail-block">
@@ -195,7 +212,30 @@
       <div><span>Shadow status</span><b id="detShadow">—</b></div>
     </div>
 
-    <button class="btn btn-outline btn-sm" id="addToCompareBtn">+ Add to Comparison</button>
+    
+    <div style="display:flex; gap:8px; margin-top: 10px;">
+      <button class="btn btn-outline btn-sm" id="addToCompareBtn" style="flex:1; padding:8px 4px;">+ Compare</button>
+      <button class="btn btn-outline btn-sm" id="briefingBtn" style="flex:1; padding:8px 4px;">Briefing</button>
+      <div style="position:relative; flex:1;">
+        <button class="btn btn-outline btn-sm" id="exportReportBtn" style="width:100%; padding:8px 4px;">Export ▼</button>
+        <div id="exportMenu" style="position:absolute; bottom:100%; left:0; width:100%; background:var(--panel); border:1px solid var(--hairline); border-radius:6px; z-index:10; margin-bottom:4px;" hidden>
+          <button id="exportPdfBtn" class="btn btn-ghost btn-sm" style="width:100%; text-align:left;">As PDF</button>
+          <button id="exportCsvBtn" class="btn btn-ghost btn-sm" style="width:100%; text-align:left;">As CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="briefingPanel" hidden>
+      <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:6px 10px; margin-top:15px; border-radius:6px 6px 0 0; border:1px solid var(--hairline); border-bottom:none;">
+        <span style="font-family:var(--font-mono); font-size:0.7rem; color:var(--slate);">mission_brief.txt</span>
+        <button id="copyBriefingBtn" class="icon-btn" style="width:24px; height:24px; background:transparent; border:none; color:var(--slate);" title="Copy to clipboard">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+      </div>
+      <div id="briefingContent" style="padding:12px; background:rgba(0,0,0,0.4); border:1px solid var(--hairline); border-radius:0 0 6px 6px; font-family:var(--font-mono); font-size:0.75rem; color:var(--ice); line-height:1.4;">
+      </div>
+    </div>
+
   </aside>
 
   <!-- ===== BOTTOM DRAWER: COMPARISON TABLE ===== -->
@@ -235,6 +275,14 @@
   </form>
 </div>
 
+<script src="assets/jspdf.umd.min.js"></script>
 <script src="dashboard.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js');
+    });
+  }
+</script>
 </body>
 </html>

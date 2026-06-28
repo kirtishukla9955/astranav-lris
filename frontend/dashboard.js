@@ -66,6 +66,23 @@ const HOST_NAME = window.location.hostname || '127.0.0.1';
 const BACKEND_BASE_URL = window.localStorage.getItem('ASTRANAV_API_URL') || `http://${HOST_NAME}:8000`;
 const BACKEND_WS_URL = window.localStorage.getItem('ASTRANAV_WS_URL') || `ws://${HOST_NAME}:8000`;
 
+// --- ONLINE/OFFLINE PWA STATUS ---
+function updateNetworkStatus() {
+  const statusEl = document.getElementById('networkStatus');
+  if (!statusEl) return;
+  if (navigator.onLine) {
+    statusEl.textContent = 'ONLINE';
+    statusEl.style.color = 'var(--cyan)';
+  } else {
+    statusEl.textContent = 'OFFLINE (CACHED)';
+    statusEl.style.color = 'var(--slate-dim)';
+  }
+}
+window.addEventListener('online', updateNetworkStatus);
+window.addEventListener('offline', updateNetworkStatus);
+updateNetworkStatus();
+
+
 let GRID_COLS = 46, GRID_ROWS = 28;
 const DARK_PENALTY = 4.2;
 const BASE_WH_PER_CELL = 2.1;
@@ -219,6 +236,101 @@ function resizeCanvas() {
 }
 window.addEventListener('resize', resizeCanvas);
 
+
+// --- SOLAR TIME-LAPSE ---
+let sunAngle = 0;
+let timeLapseActive = false;
+let sunPlaying = false;
+let sunSpeed = 1;
+let sunRAF = null;
+
+function tickSun() {
+  if (!sunPlaying) return;
+  sunAngle = (sunAngle + 0.2 * sunSpeed) % 360;
+  const scrubber = document.getElementById('sunScrubber');
+  if (scrubber) scrubber.value = sunAngle;
+  timeLapseActive = true;
+  updateIllumination();
+  render();
+  sunRAF = requestAnimationFrame(tickSun);
+}
+
+function updateIllumination() {
+  const sunRad = sunAngle * Math.PI / 180;
+  const sx = Math.cos(sunRad);
+  const sy = Math.sin(sunRad);
+
+  for (let y = 0; y < region.rows; y++) {
+    for (let x = 0; x < region.cols; x++) {
+      const cell = region.cells[y][x];
+      cell.liveShadow = false;
+      if (cell.craterId !== -1) {
+        const c = region.craters.find(cr => cr.id === cell.craterId);
+        if (c) {
+          const dx = x - c.cx;
+          const dy = y - c.cy;
+          const dist = Math.hypot(dx, dy);
+          if (dist < c.r) {
+            const dot = (dx * sx + dy * sy) / (dist || 1);
+            if (dot > -0.2) cell.liveShadow = true;
+          }
+        }
+      }
+    }
+  }
+  
+  const pitstopStatus = document.getElementById('pitstopStatus');
+  if (pitstopStatus) {
+    if (activeRoute && activeRoute.pitstopIndices.length > 0) {
+      let anyOpen = false;
+      activeRoute.pitstopIndices.forEach(idx => {
+        const p = activeRoute.path[Math.min(idx, activeRoute.path.length - 1)];
+        const c = cellAt(p.x, p.y);
+        if (c && !c.liveShadow) anyOpen = true;
+      });
+      pitstopStatus.textContent = anyOpen ? 'OPEN' : 'CLOSED';
+      pitstopStatus.style.color = anyOpen ? '#ffe28a' : '#ff6b5e';
+    } else {
+      pitstopStatus.textContent = 'N/A';
+      pitstopStatus.style.color = 'var(--slate)';
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const sunScrubber = document.getElementById('sunScrubber');
+  const sunPlayBtn = document.getElementById('sunPlayBtn');
+  const sunSpeedBtn = document.getElementById('sunSpeedBtn');
+  const sunPlayIcon = document.getElementById('sunPlayIcon');
+  
+  if (sunScrubber) {
+    sunScrubber.addEventListener('input', (e) => {
+      sunAngle = Number(e.target.value);
+      timeLapseActive = true;
+      updateIllumination();
+      render();
+    });
+  }
+  
+  if (sunPlayBtn) {
+    sunPlayBtn.addEventListener('click', () => {
+      sunPlaying = !sunPlaying;
+      if (sunPlayIcon) sunPlayIcon.innerHTML = sunPlaying ? '<rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/>' : '<path d="M7 5v14l11-7L7 5Z" fill="currentColor"/>';
+      if (sunPlaying) tickSun();
+      else cancelAnimationFrame(sunRAF);
+    });
+  }
+  
+  if (sunSpeedBtn) {
+    sunSpeedBtn.addEventListener('click', () => {
+      if (sunSpeed === 1) sunSpeed = 4;
+      else if (sunSpeed === 4) sunSpeed = 10;
+      else sunSpeed = 1;
+      if (sunSpeedBtn) sunSpeedBtn.textContent = sunSpeed + 'x';
+    });
+  }
+});
+
 function buildTerrainNoise() {
   const rng = mulberry32(REGION_SEEDS[currentRegionKey] + 99);
   terrainNoise = [];
@@ -243,6 +355,8 @@ function render() {
       const cell = region.cells[y][x];
       const n = terrainNoise[y][x];
       let base = 26 + cell.elevation * 60 + (n - 0.5) * 14;
+      if (timeLapseActive && cell.liveShadow) base *= 0.3;
+      else if (!timeLapseActive && cell.shadow) base *= 0.3;
       base = Math.max(8, Math.min(110, base));
       ctx.fillStyle = `rgb(${base},${base + 2},${base + 4})`;
       ctx.fillRect(x * cellW, y * cellH, cellW + 0.5, cellH + 0.5);
@@ -1105,6 +1219,156 @@ document.getElementById('addToCompareBtn').addEventListener('click', () => {
   render();
 });
 
+
+// --- EXPORT REPORT & AI BRIEFING ---
+document.addEventListener('DOMContentLoaded', () => {
+  const exportReportBtn = document.getElementById('exportReportBtn');
+  const exportMenu = document.getElementById('exportMenu');
+  const exportPdfBtn = document.getElementById('exportPdfBtn');
+  const exportCsvBtn = document.getElementById('exportCsvBtn');
+  const briefingBtn = document.getElementById('briefingBtn');
+  const briefingPanel = document.getElementById('briefingPanel');
+  const briefingContent = document.getElementById('briefingContent');
+  const copyBriefingBtn = document.getElementById('copyBriefingBtn');
+
+  if (exportReportBtn) {
+    exportReportBtn.addEventListener('click', () => {
+      exportMenu.hidden = !exportMenu.hidden;
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (exportReportBtn && !exportReportBtn.contains(e.target) && exportMenu && !exportMenu.contains(e.target)) {
+      exportMenu.hidden = true;
+    }
+  });
+
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener('click', () => {
+      exportMenu.hidden = true;
+      if (!lastLmrs) return;
+      
+      let csv = "Site Coordinates,LMRS Score,RAI,Comm Visibility,Thermal Score,Ice Volume (m3),Ice Depth (m),Confidence,Energy to Reach (Wh),Shadow Status\n";
+      csv += `"${document.getElementById('lmrsCoord').textContent}",${lastLmrs.LMRS},${lastLmrs.RAI},${lastLmrs.CommVisibility},${lastLmrs.ThermalScore},${lastLmrs.ice.volume_m3},${lastLmrs.ice.depth_m},${lastLmrs.ice.confidence},${lastLmrs.reachable ? lastLmrs.energyWh : 'N/A'},${lastLmrs.shadow}\n`;
+      
+      if (activeRoute) {
+        csv += "\nWaypoint,X,Y,Pitstop\n";
+        activeRoute.path.forEach((p, i) => {
+          csv += `${i},${p.x},${p.y},${p.pitstop ? 'Yes' : 'No'}\n`;
+        });
+      }
+      
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `AstraNav-LRIS_Site_${lastLmrs.cell.x}_${lastLmrs.cell.y}_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  if (exportPdfBtn) {
+    exportPdfBtn.addEventListener('click', () => {
+      exportMenu.hidden = true;
+      if (!lastLmrs || !window.jspdf) return;
+      
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.text("AstraNav-LRIS - Mission Site Report", 20, 25);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 32);
+      doc.text(`Region: ${REGION_LABELS[currentRegionKey] || currentRegionKey}`, 20, 38);
+      
+      doc.line(20, 42, 190, 42);
+      
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("Site Details", 20, 52);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Coordinates: ${document.getElementById('lmrsCoord').textContent}`, 20, 60);
+      doc.text(`LMRS Score: ${lastLmrs.LMRS}/100`, 20, 67);
+      doc.text(`Resource Accessibility: ${lastLmrs.RAI}`, 20, 74);
+      doc.text(`Communication Visibility: ${lastLmrs.CommVisibility}`, 20, 81);
+      doc.text(`Thermal Risk Score: ${lastLmrs.ThermalScore}`, 20, 88);
+      
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("Resource Estimation", 20, 103);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Ice Volume: ${lastLmrs.ice.volume_m3.toLocaleString()} m3`, 20, 111);
+      doc.text(`Ice Depth: ${lastLmrs.ice.depth_m} m`, 20, 118);
+      doc.text(`Detection Confidence: ${Math.round(lastLmrs.ice.confidence * 100)}%`, 20, 125);
+      doc.text(`Hazard Status: ${lastLmrs.shadow ? 'Permanently Shadowed (25 K)' : 'Sunlit'}`, 20, 132);
+      
+      if (activeRoute) {
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("Route Plan", 20, 147);
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Distance: ${(activeRoute.distanceM / 1000).toFixed(2)} km`, 20, 155);
+        doc.text(`Total Energy Cost: ${activeRoute.totalWh} Wh`, 20, 162);
+        doc.text(`Dark Dwell: ${activeRoute.darkMinutes} mins`, 20, 169);
+        doc.text(`Solar Pitstops Required: ${activeRoute.pitstopIndices.length}`, 20, 176);
+      }
+      
+      doc.save(`AstraNav-LRIS_Site_${lastLmrs.cell.x}_${lastLmrs.cell.y}_${new Date().toISOString().split('T')[0]}.pdf`);
+    });
+  }
+
+  function mockMissionBriefing(data) {
+    return `The selected site at ${document.getElementById('lmrsCoord').textContent} presents an LMRS score of ${data.LMRS}/100. It offers an estimated ${data.ice.volume_m3.toLocaleString()} m³ of water-ice at ${data.ice.depth_m}m depth. ${data.reachable ? 'A safe traverse route has been successfully plotted, costing approximately ' + activeRoute.totalWh + ' Wh.' : 'Currently, no safe route can be charted without exceeding thermal or hazard safety margins.'} Proceed with caution based on these parameters.`;
+  }
+
+  if (briefingBtn) {
+    briefingBtn.addEventListener('click', async () => {
+      briefingPanel.hidden = !briefingPanel.hidden;
+      if (briefingPanel.hidden) return;
+      
+      if (!lastLmrs) {
+        briefingContent.textContent = "No site selected. Please click on the map.";
+        return;
+      }
+      
+      briefingContent.textContent = "Generating briefing...";
+      
+      try {
+        const payload = { lmrs: lastLmrs, route: activeRoute };
+        const res = await fetch(`${BACKEND_BASE_URL}/api/mission-briefing`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error("API not available");
+        const data = await res.json();
+        briefingContent.innerHTML = data.briefing + "<br><br><span style='color:var(--slate-dim);font-size:0.65rem;'>(online - generated by AI)</span>";
+      } catch (err) {
+        const fallbackText = mockMissionBriefing(lastLmrs);
+        briefingContent.innerHTML = fallbackText + "<br><br><span style='color:var(--slate-dim);font-size:0.65rem;'>(offline - generated locally)</span>";
+      }
+    });
+  }
+
+  if (copyBriefingBtn) {
+    copyBriefingBtn.addEventListener('click', () => {
+      if (briefingContent.textContent) {
+        navigator.clipboard.writeText(briefingContent.innerText);
+        const old = copyBriefingBtn.innerHTML;
+        copyBriefingBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        setTimeout(() => copyBriefingBtn.innerHTML = old, 1500);
+      }
+    });
+  }
+});
+
 /* ---------------------------------------------------------------
    6) COMPARE MODE
 ---------------------------------------------------------------- */
@@ -1506,12 +1770,20 @@ async function populateRegions() {
 
 async function loadRegion(key) {
   currentRegionKey = key;
+  let data = null;
   try {
     console.log(`Fetching grid for region ${key}...`);
     const res = await fetch(`${BACKEND_BASE_URL}/api/regions/${key}/grid`);
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    const data = await res.json();
-    
+    data = await res.json();
+    localStorage.setItem(`cached_region_${key}`, JSON.stringify(data));
+  } catch (err) {
+    console.warn(`Failed to fetch region ${key} grid from backend, falling back to cache...`, err);
+    const cached = localStorage.getItem(`cached_region_${key}`);
+    if (cached) data = JSON.parse(cached);
+  }
+
+  if (data) {
     GRID_ROWS = data.rows;
     GRID_COLS = data.cols;
     
@@ -1530,6 +1802,7 @@ async function loadRegion(key) {
         shadow: c.is_shadowed,
         hazard: c.is_hazard,
         boulder: c.is_hazard,
+        craterId: c.crater_id !== undefined ? c.crater_id : -1,
         ice: c.ice_volume_m3 > 0 ? {
           volume_m3: c.ice_volume_m3,
           depth_m: (1 + c.ice_confidence * 4).toFixed(1),
@@ -1541,6 +1814,7 @@ async function loadRegion(key) {
     region = {
       key: key,
       cells: cells,
+      craters: [],
       cols: data.cols,
       rows: data.rows,
       landing: { x: 0, y: 0 },
@@ -1558,14 +1832,13 @@ async function loadRegion(key) {
       if (LZ) break;
     }
     region.landing = LZ || { x: 0, y: 0 };
-    console.log(`Region ${key} grid loaded successfully from backend. LZ at:`, region.landing);
-  } catch (err) {
-    console.warn(`Failed to fetch region ${key} grid from backend, falling back to local simulation:`, err);
+    console.log(`Region ${key} grid loaded successfully. LZ at:`, region.landing);
+  } else {
+    console.warn(`No cache for ${key}, falling back to local simulation generation`);
     GRID_ROWS = 28;
     GRID_COLS = 46;
     region = generateRegion(key);
   }
-
   buildTerrainNoise();
   routeStart = null; routeEnd = null; activeRoute = null; routeProgress = 0;
   compareSet = []; swarm.a.route = null; swarm.b.route = null;
