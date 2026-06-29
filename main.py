@@ -9,12 +9,22 @@ from typing import Dict
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("AstraNav-API")
 
-# Import all schemas
 from schemas import (
     RouteResponse, LMRSResponse, CompareRequest, CompareResponse,
     SwarmRouteRequest, SwarmRouteResponse, ExplainRequest, ExplainResponse,
-    RouteConfidenceResponse
+    RouteConfidenceResponse, IlluminationTimelapseResponse,
+    MissionSnapshotResponse, IceLayerData, MissionBriefingResponse,
+    MissionReportData
 )
+
+from datetime import datetime, timezone
+from fastapi.responses import StreamingResponse
+
+from SID_4_BACKS.illumination import simulate_illumination
+from SID_4_BACKS.report import assemble_report_data, to_csv, to_pdf
+from SID_4_BACKS.briefing import generate_mission_briefing
+
+KNOWN_REGION_IDS = ["shackleton", "shoemaker", "faustini", "nobile"]
 
 # Import logic modules
 from cost_grid import generate_mock_cost_grid, CostGrid
