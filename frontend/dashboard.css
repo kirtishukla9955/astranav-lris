@@ -17,6 +17,7 @@
 .dtop-left{display:flex;align-items:center;gap:16px;}
 .dtop-divider{width:1px;height:22px;background:var(--hairline);}
 .region-select{
+  color: white !important;
   background:var(--panel);
   border:1px solid var(--hairline);
   color:var(--ice);
@@ -36,7 +37,7 @@
 /* ---------------- SHELL LAYOUT ---------------- */
 .dash-shell{
   display:grid;
-  grid-template-columns:280px 1fr 340px;
+  grid-template-columns:280px 1fr;
   height:calc(100vh - 60px);
   position:relative;
 }
@@ -167,6 +168,12 @@
   padding:20px 20px 30px;
   transform:translateX(100%);
   transition:transform .4s var(--ease);
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 340px;
+  z-index: 60;
 }
 .lmrs-panel.open{transform:translateX(0);}
 .lmrs-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
@@ -284,7 +291,13 @@
   .lmrs-panel{
     position:fixed;top:60px;right:0;bottom:0;width:320px;
     transform:translateX(100%);z-index:60;
-  }
+    position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 340px;
+  z-index: 60;
+}
   .lmrs-panel.open{transform:translateX(0);}
   .compare-drawer{left:240px;}
   .dtop-center{display:none;}
@@ -300,8 +313,15 @@
   .rail.open{transform:translateX(0);}
   .compare-drawer{left:0;}
   .copilot-panel{width:92vw;right:4vw;}
-  .lmrs-panel{width:88vw;}
-  .region-select{max-width:140px;font-size:.74rem;}
+  .lmrs-panel{width:88vw;  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 340px;
+  z-index: 60;
+}
+  .region-select{
+  color: white !important;max-width:140px;font-size:.74rem;}
   .brand-text{display:none;}
   .dtop{padding:0 12px;gap:8px;}
   .dtop-left{gap:8px;}
@@ -384,6 +404,7 @@
 
 /* Fix dropdown options visibility */
 .region-select option {
+  color: white !important;
   background-color: #0a0d14;
   color: #e5ebf0;
 }
