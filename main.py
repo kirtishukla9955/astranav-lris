@@ -2,7 +2,12 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import asyncio
+import logging
 from typing import Dict
+
+# Configure production-ready logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("AstraNav-API")
 
 # Import all schemas
 from schemas import (
@@ -39,6 +44,7 @@ active_swarm_routes: Dict[str, Dict[str, RouteResponse]] = {}
 
 @app.get("/api/route", response_model=RouteResponse)
 async def get_route(start_lat: float, start_lon: float, end_lat: float, end_lon: float, region_id: str):
+    logger.info(f"Route requested for region {region_id} from ({start_lat}, {start_lon}) to ({end_lat}, {end_lon})")
     start_x, start_y = int(start_lon * 10000), int(start_lat * 10000)
     goal_x, goal_y = int(end_lon * 10000), int(end_lat * 10000)
     
