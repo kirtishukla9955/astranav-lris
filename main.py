@@ -102,12 +102,72 @@ async def websocket_telemetry(websocket: WebSocket, region_id: str):
 async def get_illumination_timelapse(
     region_id: str,
     num_frames: int = 100,
-):  num_frames = max(1, min(num_frames, 500))
-    return simulate_illumination(
-        grid=GLOBAL_GRID,
-        region_id=region_id,
-        num_frames=num_frames,
-    )
+):
+    num_frames = max(1, min(num_frames, 500))
+    return simulate_illumination(GLOBAL_GRID, region_id, num_frames)
+
+from pydantic import BaseModel
+from typing import List, Optional
+
+class ReplanRequest(BaseModel):
+    region_id: str
+    current_lat: float
+    current_lon: float
+    end_lat: float
+    end_lon: float
+    anomaly_type: str
+    anomaly_magnitude: float
+    use_predictive_battery: bool = False
+    initial_battery_pct: float = 100.0
+    original_route_waypoints: List[dict]
+
+@app.post("/api/replan-contingency")
+async def replan_contingency(req: ReplanRequest):
+    import time
+    start_time = time.perf_counter()
+    
+    # Generate mock explanation based on anomaly type
+    if req.anomaly_type == "wheel_degradation":
+        reason = "Actuator degradation detected in wheel."
+        effects = f"Wheel efficiency reduced by {int(req.anomaly_magnitude * 100)}%."
+        decisions = "Rerouting to the closest safe solar charging pitstop."
+    elif req.anomaly_type == "battery_drain":
+        reason = "Primary battery cell failure."
+        effects = f"Step drop of {int(req.anomaly_magnitude * 100)}% in charge."
+        decisions = "Initiating emergency detour to solar pitstop."
+    elif req.anomaly_type == "sensor_degradation":
+        reason = "Laser scanner lens occlusion (dust accumulation)."
+        effects = "Safety margins expanded (slope costs scaled by 3.0x)."
+        decisions = "Planner forced into risk-averse routing mode."
+    else:
+        reason = f"Simulated anomaly type: {req.anomaly_type}"
+        effects = f"Operational metrics altered by factor {req.anomaly_magnitude}"
+        decisions = "Route replanned to recovery waypoint."
+
+    # Mock route changes
+    new_waypoints = req.original_route_waypoints.copy()
+    if len(new_waypoints) > 1:
+        # Simulate a detour by shifting coordinates slightly
+        new_waypoints[1]["lat"] += 0.001
+        new_waypoints[1]["lon"] += 0.001
+
+    replan_time_ms = (time.perf_counter() - start_time) * 1000.0
+
+    return {
+        "new_path": new_waypoints,
+        "recovery_target": {"lat": req.end_lat, "lon": req.end_lon, "label": "Emergency Target"},
+        "explanation": {
+            "reason": reason,
+            "effects": effects,
+            "decisions": decisions
+        },
+        "metrics": {
+            "before": {"op_confidence": 95.0, "eta_min": 25.0, "battery_pct": 80.0, "energy_wh": 120.0, "risk": 15.0},
+            "after": {"op_confidence": 75.0, "eta_min": 35.0, "battery_pct": 45.0, "energy_wh": 180.0, "risk": 35.0}
+        },
+        "replan_time_ms": round(replan_time_ms + 150.0, 2) # Add 150ms mock delay
+    }
+
 @app.get("/api/health")
 async def health_check():
   
@@ -193,7 +253,7 @@ async def get_mission_snapshot(region_id: str):
         lmrs=lmrs,
         route_confidence=route_confidence,
     )
-  @app.get("/api/export/csv")
+@app.get("/api/export/csv")
 async def export_csv(region_id: str, lat: float, lon: float):
 
     data: MissionReportData = assemble_report_data(lat, lon, region_id, GLOBAL_GRID)
@@ -214,7 +274,7 @@ async def export_pdf(region_id: str, lat: float, lon: float):
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     ) 
- @app.get("/api/mission-briefing", response_model=MissionBriefingResponse)
+@app.get("/api/mission-briefing", response_model=MissionBriefingResponse)
 async def get_mission_briefing(lat: float, lon: float, region_id: str):
     return generate_mission_briefing(
         lat=lat,
