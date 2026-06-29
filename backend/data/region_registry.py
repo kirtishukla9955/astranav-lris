@@ -118,39 +118,84 @@ def build_grid_for_region(region_id: str) -> PolarGrid:
         cell_size_m=cfg.cell_size_m,
     )
 
-    # ── Step 2: shadow band & sunlit rim ─────────────────────────────────────
-    shadow_start, shadow_end = cfg.shadow_band_rows
-    for r in range(shadow_start, min(shadow_end + 1, cfg.rows)):
-        for c in range(cfg.cols):
-            grid.mark_shadow(r, c, illumination=0.0, temperature_k=25.0)
+    # ── Step 2 & 3: Procedural Crater Generation ─────────────────────────────
+    # Instead of sparse mock GeoJSONs, we procedurally generate craters,
+    # shadows, and hazards using a seeded RNG to create a beautiful,
+    # realistic map that matches the frontend's procedural fallback.
+    import random
+    import math
+    
+    # Use a fixed seed so the map is consistent between reloads
+    seed = 1337 if region_id == "shackleton-east" else 5021
+    rng = random.Random(seed)
+    
+    craters = []
+    crater_count = 5 + int(rng.random() * 3)
+    for i in range(crater_count):
+        cx = 4 + rng.random() * (cfg.cols - 8)
+        cy = 4 + rng.random() * (cfg.rows - 8)
+        r = 3 + rng.random() * 4.2
+        craters.append((cx, cy, r))
+        
+    for r_i in range(cfg.rows):
+        for c_i in range(cfg.cols):
+            for (cx, cy, r) in craters:
+                d = math.hypot(c_i - cx, r_i - cy)
+                if d < r * 0.78:
+                    grid.mark_shadow(r_i, c_i, 0.0, 25.0)
+                elif d < r:
+                    grid.mark_hazard(r_i, c_i)
+                    
+    # Carve corridors in the hazard rims
+    for (cx, cy, r) in craters:
+        gap_count = 2 if r > 5 else 1
+        gap_angles = [rng.random() * math.pi * 2 for _ in range(gap_count)]
+        gap_width = 0.5
+        for r_i in range(cfg.rows):
+            for c_i in range(cfg.cols):
+                cell = grid.get_cell(r_i, c_i)
+                if not cell.is_hazard or cell.is_shadowed:
+                    continue
+                angle = math.atan2(r_i - cy, c_i - cx)
+                in_gap = False
+                for ga in gap_angles:
+                    diff = abs(angle - ga)
+                    if diff > math.pi: diff = math.pi * 2 - diff
+                    if diff < gap_width / 2:
+                        in_gap = True
+                        break
+                if in_gap:
+                    grid.cells[r_i][c_i].is_hazard = False
+                    
+    # Scatter boulder hazards
+    boulder_count = int(cfg.cols * cfg.rows * 0.035)
+    for _ in range(boulder_count):
+        bx = int(rng.random() * cfg.cols)
+        by = int(rng.random() * cfg.rows)
+        cell = grid.get_cell(by, bx)
+        if not cell.is_shadowed and not cell.is_hazard:
+            grid.mark_hazard(by, bx)
+            
+    # Scatter ice candidates
+    for (cx, cy, r) in craters:
+        for r_i in range(cfg.rows):
+            for c_i in range(cfg.cols):
+                cell = grid.get_cell(r_i, c_i)
+                if cell.is_shadowed:
+                    cpr = 0.5 + rng.random() * 1.0
+                    dop = rng.random() * 0.25
+                    dc = 2.0 + rng.random() * 2.0
+                    if cpr > 1.0 and dop < 0.13 and dc > 2.5:
+                        dist_factor = 1 - math.hypot(c_i - cx, r_i - cy) / (r * 0.78)
+                        base_vol = 800 + rng.random() * 5200
+                        shift_mult = min(2.0, max(0.1, (dc - 2.5) * 2))
+                        vol = round(base_vol * shift_mult * (0.5 + dist_factor * 0.6))
+                        conf = min(0.97, max(0.42, 0.5 + dist_factor * 0.4 + (rng.random() - 0.5) * 0.15))
+                        grid.mark_ice(r_i, c_i, vol, conf)
 
-    rim_start, rim_end = cfg.sunlit_rim_rows
-    for r in range(rim_start, min(rim_end + 1, cfg.rows)):
-        for c in range(cfg.cols):
-            illumination = 0.7 + 0.3 * (r - rim_start) / max(rim_end - rim_start, 1)
-            grid.mark_illuminated(r, c, illumination=illumination, temperature_k=200.0)
-
-    # ── Step 3: hazard layer ─────────────────────────────────────────────────
-    try:
-        hazard_geojson = fetch_hazard_layer(region_id)
-        for feature in hazard_geojson.get("features", []):
-            _rasterise_polygon_bbox(grid, feature["geometry"]["coordinates"][0], hazard=True)
-    except KeyError:
-        pass  # no hazard data for this region — non-fatal
-
-    # ── Step 4: ice layer ────────────────────────────────────────────────────
-    try:
-        ice_geojson = fetch_ice_layer(region_id)
-        for feature in ice_geojson.get("features", []):
-            props = feature["properties"]
-            _rasterise_polygon_bbox(
-                grid,
-                feature["geometry"]["coordinates"][0],
-                ice_volume_m3=props.get("volume_m3", 0.0),
-                ice_confidence=props.get("confidence", 0.0),
-            )
-    except KeyError:
-        pass  # no ice data — non-fatal
+    # Ensure landing zone (2, 2) is safe
+    grid.cells[2][2].is_shadowed = False
+    grid.cells[2][2].is_hazard = False
 
     return grid
 
