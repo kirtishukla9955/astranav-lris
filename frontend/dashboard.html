@@ -94,6 +94,7 @@
         <button class="mode-tab active" data-mode="route">Plan Route</button>
         <button class="mode-tab" data-mode="compare">Compare Sites</button>
         <button class="mode-tab" data-mode="swarm">Swarm View</button>
+      <button class="mode-tab" data-mode="optimize">Budget Optimizer</button>
       </div>
       <p class="rail-hint" id="modeHint">Click a start point, then an end point, on the map.</p>
     </div>
@@ -188,6 +189,35 @@
       <p class="rail-hint">Click up to 3 points on the map to shortlist candidate sites.</p>
       <div id="compareList" class="compare-list"></div>
       <button class="btn btn-outline btn-sm" id="clearCompare">Clear Selection</button>
+    </div>
+
+
+    <!-- BUDGET OPTIMIZER MODE -->
+    <div id="modeOptimize" class="rail-block" hidden>
+      <h4 class="rail-title">Mission Energy Budget</h4>
+      <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+        <span class="mono" style="font-size:0.75rem; color:var(--slate);">Budget (Wh)</span>
+        <span class="mono" id="budgetReadout" style="font-size:0.8rem; color:var(--cyan); font-weight:bold;">150 Wh</span>
+      </div>
+      <input type="range" id="budgetSlider" min="20" max="500" value="150" class="scrubber" style="margin-bottom:15px; width: 100%;">
+      <button class="btn btn-primary icon-btn-wide" id="runOptimizerBtn" style="margin-top: 0; margin-bottom: 10px;">Find Best Site</button>
+
+      <div id="optResultsBlock" hidden>
+        <h4 class="rail-title">Optimization Results</h4>
+        <div id="optRecommended" class="swarm-card best" style="border:1px solid var(--cyan); background:rgba(255,255,255,0.05); margin-bottom:15px; display: block;">
+          <!-- Populated by JS -->
+        </div>
+        <h4 class="rail-title" style="margin-top:10px; font-size:0.7rem;">Runners-Up</h4>
+        <div id="optRunnersUp">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+      
+      <div id="optErrorBlock" hidden>
+        <div style="padding:10px; border:1px solid var(--hairline); border-radius:4px; font-family:var(--font-mono); font-size:0.75rem; color:var(--slate);">
+          <span id="optErrorText"></span>
+        </div>
+      </div>
     </div>
 
     <div class="rail-block" id="swarmControls" hidden>
@@ -291,7 +321,7 @@
   </aside>
 
   <!-- ===== RIGHT SLIDE-OUT: CONTINGENCY PANEL ===== -->
-  <aside class="lmrs-panel contingency-theme" id="contingencyPanel" style="border-left: 1px solid #ff6b5e; background: rgba(15, 6, 6, 0.95); z-index: 61;">
+  <aside class="lmrs-panel contingency-theme" id="contingencyPanel" style="position: absolute; right: 0; top: 0; bottom: 0; width: 340px; border-left: 1px solid #ff6b5e; background: rgba(15, 6, 6, 0.95); z-index: 61; position: absolute; right: 0; top: 0; bottom: 0; width: 340px;">
     <div class="lmrs-head">
       <span class="rail-title" style="color: #ff6b5e; display: flex; align-items: center; gap: 6px;">
         <span class="dot-pulse" style="background-color: #ff6b5e; box-shadow: 0 0 6px #ff6b5e;"></span> CONTINGENCY REPORT
@@ -406,6 +436,7 @@
 </div>
 
 <script src="assets/jspdf.umd.min.js"></script>
+<script src="optimizer.js"></script>
 <script src="dashboard.js"></script>
 <script src="fault_injector.js"></script>
 <script>

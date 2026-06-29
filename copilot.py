@@ -36,7 +36,7 @@ def explain_routing_decision(request: ExplainRequest, grid: CostGrid) -> Explain
             is_shadow = grid.is_in_shadow(x, y)
             
             if cost == float('inf'):
-                answer = "This specific corridor is classified as hazardous because it contains a hard obstacle (boulder) or a slope > 30°."
+                answer = "This specific corridor is classified as hazardous because it contains a hard obstacle (boulder) or a slope > 15°."
             elif cost > 1.5:
                 answer = f"This corridor has an elevated traversal cost due to a significant slope (~{int((cost-1)*100)}° penalty factor)."
             elif is_shadow:
@@ -44,7 +44,7 @@ def explain_routing_decision(request: ExplainRequest, grid: CostGrid) -> Explain
             else:
                 answer = "This corridor appears relatively safe, with standard traversal costs."
         else:
-            answer = "Hazardous corridors are typically marked by slopes > 30°, large boulders, or deep shadows requiring excessive heating energy."
+            answer = "Hazardous corridors are typically marked by slopes > 15°, large boulders, or deep shadows requiring excessive heating energy."
     elif "energy" in query or "battery" in query:
          answer = (
             "Energy consumption is dynamically predicted using our machine learning battery model. "

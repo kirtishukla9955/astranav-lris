@@ -381,3 +381,9 @@
 }
 
 
+
+/* Fix dropdown options visibility */
+.region-select option {
+  background-color: #0a0d14;
+  color: #e5ebf0;
+}

@@ -191,13 +191,26 @@ function generateRegion(key) {
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
         const cell = cells[y][x];
-        if (cell.craterId === c.id && cell.shadow && rng() < 0.55) {
-          const distFactor = 1 - Math.hypot(x - c.cx, y - c.cy) / (c.r * 0.78);
-          cell.ice = {
-            volume_m3: Math.round((800 + rng() * 5200) * (0.5 + distFactor * 0.6)),
-            depth_m: +(1 + rng() * 4).toFixed(1),
-            confidence: Math.min(0.97, Math.max(0.42, 0.5 + distFactor * 0.4 + (rng() - 0.5) * 0.15)),
-          };
+        if (cell.craterId === c.id && cell.shadow) {
+          // Simulate radar signals:
+          const cpr = 0.5 + rng() * 1.0; // Circular Polarization Ratio
+          const dop = rng() * 0.25; // Degree of Polarization
+          const dielectricConstant = 2.0 + rng() * 2.0; // Lunar dust (2.5) to Ice mix (3.5+)
+          
+          if (cpr > 1.0 && dop < 0.13 && dielectricConstant > 2.5) {
+            const distFactor = 1 - Math.hypot(x - c.cx, y - c.cy) / (c.r * 0.78);
+            // Volume directly based on dielectric shift from 2.5
+            const baseVol = 800 + rng() * 5200;
+            const shiftMultiplier = Math.min(2.0, Math.max(0.1, (dielectricConstant - 2.5) * 2));
+            cell.ice = {
+              volume_m3: Math.round(baseVol * shiftMultiplier * (0.5 + distFactor * 0.6)),
+              depth_m: +(1 + rng() * 4).toFixed(1),
+              confidence: Math.min(0.97, Math.max(0.42, 0.5 + distFactor * 0.4 + (rng() - 0.5) * 0.15)),
+              cpr: cpr.toFixed(2),
+              dop: dop.toFixed(2),
+              dielectric: dielectricConstant.toFixed(2)
+            };
+          }
         }
       }
     }
@@ -748,6 +761,8 @@ document.querySelectorAll('.mode-tab').forEach(btn => {
     document.getElementById('routeControls').hidden = mode !== 'route';
     document.getElementById('compareControls').hidden = mode !== 'compare';
     document.getElementById('swarmControls').hidden = mode !== 'swarm';
+      const mo = document.getElementById('modeOptimize');
+      if(mo) mo.hidden = mode !== 'optimize';
     if (mode === 'route') setModeHint(routeStart ? (routeEnd ? '' : 'Now click an end point.') : 'Click a start point, then an end point, on the map.');
     if (mode === 'compare') setModeHint('Click up to 3 points on the map to shortlist candidate sites.');
     if (mode === 'swarm') { setModeHint('Two rovers are auto-routed to nearby ice sites. Press Play.'); ensureSwarmRoutes(); }
@@ -1856,3 +1871,98 @@ async function boot() {
 }
 
 boot();
+
+
+// --- BUDGET OPTIMIZER INTEGRATION ---
+document.addEventListener('DOMContentLoaded', () => {
+  const budgetSlider = document.getElementById('budgetSlider');
+  const budgetReadout = document.getElementById('budgetReadout');
+  const runOptimizerBtn = document.getElementById('runOptimizerBtn');
+  const optResultsBlock = document.getElementById('optResultsBlock');
+  const optErrorBlock = document.getElementById('optErrorBlock');
+  const optRecommended = document.getElementById('optRecommended');
+  const optRunnersUp = document.getElementById('optRunnersUp');
+  const optErrorText = document.getElementById('optErrorText');
+  
+  let optDebounce = null;
+
+  function runOptimizer() {
+    if (!region) return;
+    const budget = Number(budgetSlider.value);
+    budgetReadout.textContent = budget + ' Wh';
+    
+    const results = findOptimalSite(region, budget);
+    
+    if (results.recommended) {
+      optErrorBlock.hidden = true;
+      optResultsBlock.hidden = false;
+      
+      const r = results.recommended;
+      optRecommended.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <b>Grid ${r.result.cell.x}x${r.result.cell.y}</b>
+          <span class="tag-best" style="color:var(--cyan); font-weight:bold; font-size:0.75rem;">★ Recommended</span>
+        </div>
+        <div style="margin-top:6px; font-family:var(--font-mono); font-size:0.75rem;">
+          LMRS: <span style="color:var(--ice);">${r.result.LMRS}</span> | Yield: ${r.result.ice.volume_m3.toLocaleString()} m³<br>
+          Cost: ${Math.round(r.result.energyWh)} Wh | Eff: ${r.efficiency.toFixed(2)} m³/Wh
+        </div>
+        <div style="margin-top:8px; font-size:0.75rem; color:var(--ice); border-top:1px solid var(--hairline); padding-top:6px; line-height:1.4;">
+          ${r.explanation}
+        </div>
+      `;
+      
+      let html = '';
+      results.runnersUp.forEach(ru => {
+        const isRej = !ru.efficiency;
+        const color = isRej ? 'var(--slate)' : 'var(--slate-dim)';
+        const effText = ru.efficiency ? `${ru.efficiency.toFixed(2)} m³/Wh` : 'N/A';
+        html += `
+          <div class="swarm-card" style="opacity:0.7; margin-bottom:6px; padding:8px; display:block;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+              <b>Grid ${ru.result.cell.x}x${ru.result.cell.y}</b>
+              <span style="color:${color}; font-size:0.7rem; text-align:right; max-width:55%; line-height:1.2;">${ru.reason}</span>
+            </div>
+            <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--slate);">
+              Ice: ${ru.result.ice.volume_m3.toLocaleString()} m³ | Cost: ${Math.round(ru.result.energyWh)} Wh
+            </div>
+          </div>
+        `;
+      });
+      optRunnersUp.innerHTML = html;
+      
+      // Map Integration
+      lastLmrs = r.result;
+      lastLmrsCell = { x: r.cell.x, y: r.cell.y };
+      activeRoute = buildRoute(region.landing, r.cell);
+      // updateLmrsUI(r.result); // Update the LMRS panel implicitly
+      
+      // Update the pin coordinates
+      document.getElementById('lmrsCoord').textContent = `${r.cell.x}x${r.cell.y}`;
+      
+    } else {
+      optResultsBlock.hidden = true;
+      optErrorBlock.hidden = false;
+      if (results.minBudget) {
+        optErrorText.innerHTML = `No reachable site fits a <b>${budget} Wh</b> budget.<br>Try raising it to at least <b>${results.minBudget} Wh</b>.`;
+      } else {
+        optErrorText.textContent = `No reachable sites found in this region.`;
+      }
+      activeRoute = null;
+    }
+    
+    render();
+  }
+
+  if (budgetSlider) {
+    budgetSlider.addEventListener('input', () => {
+      budgetReadout.textContent = budgetSlider.value + ' Wh';
+      clearTimeout(optDebounce);
+      optDebounce = setTimeout(runOptimizer, 150);
+    });
+  }
+  
+  if (runOptimizerBtn) {
+    runOptimizerBtn.addEventListener('click', runOptimizer);
+  }
+});

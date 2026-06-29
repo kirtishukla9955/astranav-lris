@@ -24,8 +24,8 @@ class CostGrid:
         if mask.is_obstacle:
             self.grid[grid_y, grid_x] = np.inf
         else:
-            # Slopes > 30 deg make it impassable for most rovers
-            if mask.slope_deg > 30:
+            # Slopes > 15 deg make it impassable for most rovers
+            if mask.slope_deg > 15:
                 self.grid[grid_y, grid_x] = np.inf
             else:
                 # Add slope penalty (e.g., 1 + slope^2 / 100)
