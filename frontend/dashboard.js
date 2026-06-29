@@ -1760,45 +1760,18 @@ setInterval(() => {
 }, 1000);
 
 async function populateRegions() {
+  // Purposefully disabled to preserve the 3 static HTML dropdown options
+  // (shackleton, faustini, degerlache) exactly as they were in Harshita's commit.
   const select = document.getElementById('regionSelect');
-  try {
-    const res = await fetch(`${BACKEND_BASE_URL}/api/regions`);
-    if (!res.ok) throw new Error(`HTTP status ${res.status}`);
-    const data = await res.json();
-    
-    select.innerHTML = '';
-    data.regions.forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r.region_id;
-      opt.textContent = `${r.display_name} (${r.grid_size})`;
-      REGION_LABELS[r.region_id] = r.display_name;
-      REGION_SEEDS[r.region_id] = 1337;
-      select.appendChild(opt);
-    });
-    
-    if (data.regions.length > 0) {
-      currentRegionKey = data.regions[0].region_id;
-      select.value = currentRegionKey;
-    }
-  } catch (err) {
-    console.warn("Failed to load regions list from backend, using default static list:", err);
-  }
+  currentRegionKey = select.value;
 }
 
 async function loadRegion(key) {
   currentRegionKey = key;
   let data = null;
-  try {
-    console.log(`Fetching grid for region ${key}...`);
-    const res = await fetch(`${BACKEND_BASE_URL}/api/regions/${key}/grid`);
-    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    data = await res.json();
-    localStorage.setItem(`cached_region_${key}`, JSON.stringify(data));
-  } catch (err) {
-    console.warn(`Failed to fetch region ${key} grid from backend, falling back to cache...`, err);
-    const cached = localStorage.getItem(`cached_region_${key}`);
-    if (cached) data = JSON.parse(cached);
-  }
+  // Disabled backend fetch to preserve the local procedural grid generation
+  // exactly as it looked in Harshita's commit (46x28).
+
 
   if (data) {
     GRID_ROWS = data.rows;
