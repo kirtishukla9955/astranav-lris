@@ -65,6 +65,8 @@ function mulberry32(seed) {
 const HOST_NAME = window.location.hostname || '127.0.0.1';
 const BACKEND_BASE_URL = window.localStorage.getItem('ASTRANAV_API_URL') || `http://${HOST_NAME}:8000`;
 const BACKEND_WS_URL = window.localStorage.getItem('ASTRANAV_WS_URL') || `ws://${HOST_NAME}:8000`;
+window.BACKEND_BASE_URL = BACKEND_BASE_URL;
+window.BACKEND_WS_URL = BACKEND_WS_URL;
 
 // --- ONLINE/OFFLINE PWA STATUS ---
 function updateNetworkStatus() {
