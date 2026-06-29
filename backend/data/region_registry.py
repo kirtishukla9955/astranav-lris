@@ -165,7 +165,7 @@ def build_grid_for_region(region_id: str) -> PolarGrid:
                         in_gap = True
                         break
                 if in_gap:
-                    grid.cells[r_i][c_i].is_hazard = False
+                    grid.get_cell(r_i, c_i).is_hazard = False
                     
     # Scatter boulder hazards
     boulder_count = int(cfg.cols * cfg.rows * 0.035)
@@ -194,8 +194,8 @@ def build_grid_for_region(region_id: str) -> PolarGrid:
                         grid.mark_ice(r_i, c_i, vol, conf)
 
     # Ensure landing zone (2, 2) is safe
-    grid.cells[2][2].is_shadowed = False
-    grid.cells[2][2].is_hazard = False
+    grid.get_cell(2, 2).is_shadowed = False
+    grid.get_cell(2, 2).is_hazard = False
 
     return grid
 
