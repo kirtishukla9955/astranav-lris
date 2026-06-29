@@ -1944,7 +1944,7 @@ document.addEventListener('DOMContentLoaded', () => {
       optResultsBlock.hidden = true;
       optErrorBlock.hidden = false;
       if (results.minBudget) {
-        optErrorText.innerHTML = `No reachable site fits a <b>${budget} Wh</b> budget.<br>Try raising it to at least <b>${results.minBudget} Wh</b>.`;
+        optErrorText.innerHTML = `No reachable site fits a <b>${budget} Wh</b> budget.<br>Try raising it to at least <b>${results.minBudget} Wh</b>.<div style="margin-top:12px;"><button onclick="document.getElementById('budgetSlider').value=${results.minBudget}; document.getElementById('budgetSlider').dispatchEvent(new Event('input'));" style="padding:6px 12px; font-size:0.75rem; border-radius:4px; border:none; background:var(--cyan); color:var(--panel); cursor:pointer; font-weight:bold;">Auto-Adjust to ${results.minBudget} Wh</button></div>`;
       } else {
         optErrorText.textContent = `No reachable sites found in this region.`;
       }
