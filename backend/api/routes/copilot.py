@@ -127,30 +127,15 @@ def _summarise_lmrs(lmrs_result) -> str:
 
 def _call_claude(context_block: str, question: str) -> str:
     """
-    Call the Anthropic Claude API synchronously, or fall back to a rule-based
-    mock system if the API key is not set.
+    Call the Anthropic Claude API synchronously.
+    Returns the assistant's answer text, or raises on failure.
     """
+    import anthropic  # lazy import — avoids import error if not installed
+
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    
     if not api_key:
-        logger.info("No ANTHROPIC_API_KEY found, using rule-based local copilot.")
-        q = question.lower()
-        if "contingency" in q:
-            return "The Trigger Contingency button activates the Mission Anomaly Response Engine. It recalculates the rover's route by simulating anomalies (e.g., wheel degradation, sensor failure, or battery drain) to find a safe recovery path or the nearest communication node."
-        elif "hazardous" in q or "corridor" in q:
-            return "This corridor is marked hazardous due to either a slope exceeding 15 degrees or the presence of boulders larger than 0.5m, making it impassable for the rover."
-        elif "lmrs" in q:
-            return "The Lunar Mining Readiness Score (LMRS) is a 0-100 composite index. It evaluates the site based on Resource Accessibility (distance to ice), Communication Visibility (line-of-sight to Earth/relay), and Thermal Risk (energy needed and temperature). A higher score indicates a more viable site."
-        elif "energy" in q:
-            return "The route energy is calculated based on path distance and terrain temperature. Traveling through permanently shadowed regions (~25 K) requires significantly more energy for heating compared to sunlit paths."
-        elif "confident" in q or "ice" in q:
-            return "The ice detection confidence is derived from the DFSAR Circular Polarization Ratio (CPR > 1.0) and Degree of Polarization (DOP < 0.13). These values indicate strong radar signatures consistent with water-ice."
-        elif "pitstop" in q or "solar" in q:
-            return "A solar pitstop is automatically inserted when the rover spends too much time in a shadowed region (PSR) and exceeds its dark dwell budget. It routes the rover to the nearest sunlit rim to recharge its batteries."
-        else:
-            return "Based on the mission data, I analyzed the region context, but I need a more specific question about hazards, ice, LMRS, or energy to provide a detailed answer."
-            
-    import anthropic
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
     client = anthropic.Anthropic(api_key=api_key)
 
     system_prompt = (
