@@ -1692,42 +1692,8 @@ function answerCopilot(qRaw) {
 }
 
 async function askCopilot(question) {
-  let success = false;
-  let contextPoint = null;
-  
-  if (lastLmrsCell) {
-    const cell = cellAt(lastLmrsCell.x, lastLmrsCell.y);
-    if (cell && cell.lat !== undefined && cell.lon !== undefined) {
-      contextPoint = { lat: cell.lat, lon: cell.lon };
-    }
-  }
-  
-  try {
-    const body = {
-      region_id: currentRegionKey,
-      question: question,
-      context_point: contextPoint
-    };
-    
-    console.log("Sending copilot question to backend:", body);
-    const res = await fetch(`${BACKEND_BASE_URL}/api/copilot/ask`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    
-    if (!res.ok) throw new Error(`HTTP status ${res.status}`);
-    const data = await res.json();
-    
-    pushMessage(data.answer, 'bot');
-    success = true;
-  } catch (err) {
-    console.warn("Backend copilot query failed, using offline rule templates:", err);
-  }
-  
-  if (!success) {
-    setTimeout(() => pushMessage(answerCopilot(question), 'bot'), 380);
-  }
+  // Fully offline, template-based logic. No network endpoints required.
+  setTimeout(() => pushMessage(answerCopilot(question), 'bot'), 380);
 }
 
 document.getElementById('copilotForm').addEventListener('submit', (e) => {
