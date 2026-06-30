@@ -20,7 +20,7 @@ python-multipart>=0.0.9
 httpx>=0.27.0
 
 # ── LLM (copilot feature) ─────────────────────────────────────────────────────
-anthropic>=0.28.0
+google-generativeai>=0.7.0
 
 # ── Database (PostGIS / SQLite fallback) ─────────────────────────────────────
 sqlalchemy>=2.0.0

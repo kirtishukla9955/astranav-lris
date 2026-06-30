@@ -1692,8 +1692,40 @@ function answerCopilot(qRaw) {
 }
 
 async function askCopilot(question) {
-  // Fully offline, template-based logic. No network endpoints required.
-  setTimeout(() => pushMessage(answerCopilot(question), 'bot'), 380);
+  if (!navigator.onLine) {
+    pushMessage(answerCopilot(question) + ' <span style="color: grey; font-size: 0.8em;">(offline mode — local answer)</span>', 'bot');
+    return;
+  }
+  
+  const contextObject = {
+    regionName: document.getElementById('regionSelect')?.options[document.getElementById('regionSelect').selectedIndex]?.text || 'Unknown',
+    lastLmrs: lastLmrs ? {
+      score: lastLmrs.LMRS,
+      iceVolume: lastLmrs.ice.volume_m3,
+      coordinates: { x: lastLmrs.cell.x, y: lastLmrs.cell.y }
+    } : null,
+    activeRoute: activeRoute ? {
+      distanceM: activeRoute.distanceM,
+      totalWh: activeRoute.totalWh,
+      pitstops: activeRoute.pitstopIndices.length
+    } : null
+  };
+
+  try {
+    const res = await fetch(`${BACKEND_BASE_URL}/api/copilot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: question, context: contextObject })
+    });
+    
+    if (!res.ok) throw new Error('API error');
+    
+    const data = await res.json();
+    pushMessage(data.answer, 'bot');
+  } catch (err) {
+    console.warn("Copilot API failed, falling back to local template", err);
+    pushMessage(answerCopilot(question) + ' <span style="color: grey; font-size: 0.8em;">(offline mode — local answer)</span>', 'bot');
+  }
 }
 
 document.getElementById('copilotForm').addEventListener('submit', (e) => {
