@@ -120,14 +120,6 @@
             </svg>
             Explore Data Pipeline
           </a>
-          <a href="#" class="btn btn-outline btn-lg btn-repo" target="_blank" rel="noopener">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
-              <rect x="9" y="9" width="6" height="6"></rect>
-              <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 15h3M1 9h3M1 15h3"></path>
-            </svg>
-            Open Repository
-          </a>
         </div>
 
         <div class="hero-stats" data-reveal>
@@ -205,20 +197,20 @@
         <!-- Connection Lines SVG Overlay -->
         <svg class="hud-lines" viewBox="0 0 600 450" preserveAspectRatio="none" aria-hidden="true">
           <!-- Shackleton Rim Pointer (amber) -->
-          <path class="hud-line-path line-amber" d="M150,80 C150,140 150,150 230,200" fill="none" stroke="rgba(204, 163, 83, 0.55)" stroke-width="1.4"></path>
-          <circle cx="230" cy="200" r="5" fill="#0a0a0a" stroke="#cca353" stroke-width="2" class="hud-line-dot dot-1"></circle>
+          <path class="hud-line-path line-amber" d="M150,80 C150,140 150,150 230,200" fill="none" stroke="rgba(204, 163, 83, 0.45)" stroke-width="1"></path>
+          <circle cx="230" cy="200" r="3" fill="#0a0a0a" stroke="#cca353" stroke-width="1.5" class="hud-line-dot dot-1"></circle>
 
           <!-- Ice Volume Pointer (cyan) -->
-          <path class="hud-line-path line-cyan" d="M430,85 C430,140 430,150 350,205" fill="none" stroke="rgba(52, 232, 236, 0.55)" stroke-width="1.4"></path>
-          <circle cx="350" cy="205" r="5" fill="#0a0a0a" stroke="#34e8ec" stroke-width="2" class="hud-line-dot dot-2"></circle>
+          <path class="hud-line-path line-cyan" d="M430,85 C430,140 430,150 350,205" fill="none" stroke="rgba(52, 232, 236, 0.45)" stroke-width="1"></path>
+          <circle cx="350" cy="205" r="3" fill="#0a0a0a" stroke="#34e8ec" stroke-width="1.5" class="hud-line-dot dot-2"></circle>
 
           <!-- Surface Temp Pointer (cyan) -->
-          <path class="hud-line-path line-cyan" d="M120,360 C120,300 120,290 190,260" fill="none" stroke="rgba(52, 232, 236, 0.55)" stroke-width="1.4"></path>
-          <circle cx="190" cy="260" r="5" fill="#0a0a0a" stroke="#34e8ec" stroke-width="2" class="hud-line-dot dot-3"></circle>
+          <path class="hud-line-path line-cyan" d="M120,360 C120,300 120,290 190,260" fill="none" stroke="rgba(52, 232, 236, 0.45)" stroke-width="1"></path>
+          <circle cx="190" cy="260" r="3" fill="#0a0a0a" stroke="#34e8ec" stroke-width="1.5" class="hud-line-dot dot-3"></circle>
 
           <!-- LMRS Score Pointer (amber) -->
-          <path class="hud-line-path line-amber" d="M460,355 C460,300 460,290 380,265" fill="none" stroke="rgba(204, 163, 83, 0.55)" stroke-width="1.4"></path>
-          <circle cx="380" cy="265" r="5" fill="#0a0a0a" stroke="#cca353" stroke-width="2" class="hud-line-dot dot-4"></circle>
+          <path class="hud-line-path line-amber" d="M460,355 C460,300 460,290 380,265" fill="none" stroke="rgba(204, 163, 83, 0.45)" stroke-width="1"></path>
+          <circle cx="380" cy="265" r="3" fill="#0a0a0a" stroke="#cca353" stroke-width="1.5" class="hud-line-dot dot-4"></circle>
         </svg>
 
         <!-- Floating HUD telemetry cards over the moon -->
@@ -499,6 +491,12 @@
           <span class="chip">Detection confidence overlay</span>
           <span class="chip">Mission copilot Q&amp;A</span>
           <span class="chip">Live telemetry over WebSocket</span>
+          <span class="chip">Budget-constrained optimization</span>
+          <span class="chip">Failure-mode replanning</span>
+          <span class="chip">AI mission briefing</span>
+          <span class="chip">Solar day/night time-lapse</span>
+          <span class="chip">Offline-first PWA</span>
+          <span class="chip">Exportable mission reports</span>
           <!-- duplicated for seamless loop -->
           <span class="chip">Multi-site comparison</span>
           <span class="chip">Multi-rover swarm view</span>
@@ -506,6 +504,12 @@
           <span class="chip">Detection confidence overlay</span>
           <span class="chip">Mission copilot Q&amp;A</span>
           <span class="chip">Live telemetry over WebSocket</span>
+          <span class="chip">Budget-constrained optimization</span>
+          <span class="chip">Failure-mode replanning</span>
+          <span class="chip">AI mission briefing</span>
+          <span class="chip">Solar day/night time-lapse</span>
+          <span class="chip">Offline-first PWA</span>
+          <span class="chip">Exportable mission reports</span>
         </div>
       </div>
 
@@ -535,6 +539,36 @@
           <h4>Confidence Overlay</h4>
           <p>Dielectric signal-to-noise confidence overlay to quantify measurement uncertainties.</p>
         </div>
+        <div class="beyond-card" data-reveal>
+          <span class="beyond-num">10</span>
+          <h4>Budget-Constrained Mission Optimizer</h4>
+          <p>Set an energy or cost ceiling and the system automatically searches every candidate site and route, recommending the single best mission plan that fits inside that budget — with a one-line explanation of why it won over the runner-up.</p>
+        </div>
+        <div class="beyond-card" data-reveal>
+          <span class="beyond-num">11</span>
+          <h4>Failure-Mode Replanning (Anomaly Injection)</h4>
+          <p>Inject a simulated fault — like a wheel actuator degrading mid-traverse — and watch the energy-aware pathfinder automatically replan to the nearest safe or charging waypoint in real time, with updated ETA and risk.</p>
+        </div>
+        <div class="beyond-card" data-reveal>
+          <span class="beyond-num">12</span>
+          <h4>AI Mission Briefing</h4>
+          <p>Feeds LMRS, hazard, and ice data into an LLM to auto-generate a plain-English mission note explaining why a site was chosen, in seconds.</p>
+        </div>
+        <div class="beyond-card" data-reveal>
+          <span class="beyond-num">13</span>
+          <h4>Lunar Day/Night Time-Lapse</h4>
+          <p>Animates solar illumination sweeping across a crater rim over a full lunar day, showing how safe solar-charging pitstop windows shift over time.</p>
+        </div>
+        <div class="beyond-card" data-reveal>
+          <span class="beyond-num">14</span>
+          <h4>Offline-First PWA Mode</h4>
+          <p>Caches the last loaded mission data so the dashboard keeps working fully even if the network drops mid-demo.</p>
+        </div>
+        <div class="beyond-card" data-reveal>
+          <span class="beyond-num">15</span>
+          <h4>Exportable Mission Report</h4>
+          <p>One-click PDF or CSV export of a selected site's ice volume, hazard summary, and route plan, styled like a formal mission packet.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -548,7 +582,6 @@
       <p>AstraNav-LRIS — Autonomous Lunar Resource Exploration &amp; Navigation System.</p>
       <div class="hero-actions">
         <a href="dashboard.html" class="btn btn-solid btn-lg">Launch Dashboard</a>
-        <a href="#" class="btn btn-outline btn-lg" target="_blank" rel="noopener">View Repository</a>
       </div>
     </div>
   </section>

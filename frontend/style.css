@@ -319,15 +319,15 @@ canvas {
 .hero::before {
   content: "";
   position: absolute;
-  left: 1%;
-  top: 4%;
-  bottom: 5%;
-  width: 320px;
+  left: -2%;
+  top: 10%;
+  bottom: 10%;
+  width: 260px;
   background-image: url("assets/vikram_lander_bg.png");
   background-repeat: no-repeat;
   background-position: left center;
   background-size: contain;
-  opacity: 0.55;
+  opacity: 0.15;
   pointer-events: none;
   z-index: 1;
 }
@@ -335,15 +335,15 @@ canvas {
 .hero::after {
   content: "";
   position: absolute;
-  right: 1%;
-  top: 4%;
-  bottom: 5%;
-  width: 320px;
+  right: -2%;
+  top: 10%;
+  bottom: 10%;
+  width: 260px;
   background-image: url("assets/satellite_bg.png");
   background-repeat: no-repeat;
   background-position: right center;
   background-size: contain;
-  opacity: 0.5;
+  opacity: 0.15;
   pointer-events: none;
   z-index: 1;
 }
@@ -1033,6 +1033,20 @@ canvas {
     min-width: 120px;
     padding: 9px 12px;
   }
+
+  .hero::before, .hero::after {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+  .hero-visual {
+    height: 480px;
+    order: -1;
+  }
 }
 
 @media (max-width:560px) {
@@ -1054,6 +1068,12 @@ canvas {
 
   .hud-2 {
     right: 0;
+  }
+
+  .control-bar {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
   }
 }
 
@@ -1109,6 +1129,8 @@ canvas {
   height: 100%;
   object-fit: contain;
   filter: drop-shadow(0 15px 35px rgba(0, 0, 0, 0.95)) brightness(0.95) contrast(1.08) saturate(0.9);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 50%, transparent 75%);
+  mask-image: radial-gradient(ellipse at 50% 50%, black 50%, transparent 75%);
 }
 
 .hud-lines {
@@ -1349,19 +1371,6 @@ canvas {
   box-shadow: 0 0 25px rgba(52, 232, 236, 0.3);
 }
 
-.btn-repo {
-  border-color: rgba(204, 163, 83, 0.45);
-  background: rgba(204, 163, 83, 0.05);
-  color: var(--ice);
-  box-shadow: 0 0 15px rgba(204, 163, 83, 0.1);
-}
-
-.btn-repo:hover {
-  border-color: var(--amber);
-  background: rgba(204, 163, 83, 0.14);
-  box-shadow: 0 0 25px rgba(204, 163, 83, 0.3);
-}
-
 .control-bar-wrapper {
   margin-top: 32px;
   width: 100%;
@@ -1370,15 +1379,16 @@ canvas {
 .control-bar {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 10px 24px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(8, 8, 8, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  width: fit-content;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-radius: 0;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  width: 100%;
+  box-shadow: none;
 }
 
 .control-item {
