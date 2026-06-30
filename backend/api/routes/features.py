@@ -7,12 +7,13 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
 
 # Setup isolated sys.path to safely import from SID_4_BACKS and root, swapping pathfinder temporarily
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_BACKEND = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_LEGACY = os.path.join(_BACKEND, "legacy")
 orig_pathfinder = sys.modules.get("pathfinder")
 if "pathfinder" in sys.modules:
     sys.modules.pop("pathfinder")
 
-sys.path.insert(0, _ROOT)
+sys.path.insert(0, _LEGACY)
 try:
     import pathfinder as root_pathfinder
     from SID_4_BACKS.illumination import simulate_illumination
