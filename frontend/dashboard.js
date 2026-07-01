@@ -92,11 +92,11 @@ const SHADOW_WH_EXTRA = 5.4;
 const DARK_BUDGET_CELLS = 5;
 
 const REGION_SEEDS = {
-  shackleton: 1337,
-  faustini: 5021,
-  degerlache: 8842,
-  'shackleton-east': 1337,
-  haworth: 5021
+  shackleton:         9271,  // matches backend REGION_SEEDS_BACKEND
+  faustini:           7391,
+  degerlache:         4256,
+  'shackleton-east':  1337,  // matches backend (was swapped with shackleton before)
+  haworth:            6628
 };
 const REGION_LABELS = {
   shackleton: 'Shackleton Rim · 89.9°S',
@@ -104,6 +104,17 @@ const REGION_LABELS = {
   degerlache: 'de Gerlache Rim · 88.5°S',
   'shackleton-east': 'Shackleton Crater — Eastern Rim',
   haworth: 'Haworth Crater'
+};
+
+// Per-region grid dimensions so each crater has a distinct layout in the
+// local-simulation fallback (all three were 46×28 before, making them look
+// identical when the backend was unreachable).
+const REGION_DIMS = {
+  shackleton:         { cols: 46, rows: 28 },
+  faustini:           { cols: 52, rows: 32 },  // wider, more cols — bigger crater floor
+  degerlache:         { cols: 40, rows: 36 },  // taller, more rows — elongated rim
+  'shackleton-east':  { cols: 40, rows: 40 },
+  haworth:            { cols: 30, rows: 30 },
 };
 
 let region = null; // current region data
@@ -1770,7 +1781,7 @@ async function populateRegions() {
       opt.value = r.region_id;
       opt.textContent = `${r.display_name} (${r.grid_size})`;
       REGION_LABELS[r.region_id] = r.display_name;
-      REGION_SEEDS[r.region_id] = 1337;
+      // Each region must keep its own unique seed — do NOT overwrite with a constant.
       select.appendChild(opt);
     });
     
@@ -1783,18 +1794,33 @@ async function populateRegions() {
   }
 }
 
+// Bump this version string any time seeds or grid dimensions change so stale
+// localStorage caches are automatically evicted and re-fetched from the backend.
+const CACHE_VERSION = 'v2-2026';
+
 async function loadRegion(key) {
   currentRegionKey = key;
   let data = null;
+
+  // Evict stale cache entries from before the seed/dimension fix.
+  const cacheKey  = `cached_region_${key}`;
+  const verKey    = `cached_region_ver_${key}`;
+  if (localStorage.getItem(verKey) !== CACHE_VERSION) {
+    localStorage.removeItem(cacheKey);
+    localStorage.removeItem(verKey);
+    console.log(`Cache for region "${key}" evicted (old version).`);
+  }
+
   try {
     console.log(`Fetching grid for region ${key}...`);
     const res = await fetch(`${BACKEND_BASE_URL}/api/regions/${key}/grid`);
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     data = await res.json();
-    localStorage.setItem(`cached_region_${key}`, JSON.stringify(data));
+    localStorage.setItem(cacheKey, JSON.stringify(data));
+    localStorage.setItem(verKey, CACHE_VERSION);
   } catch (err) {
     console.warn(`Failed to fetch region ${key} grid from backend, falling back to cache...`, err);
-    const cached = localStorage.getItem(`cached_region_${key}`);
+    const cached = localStorage.getItem(cacheKey);
     if (cached) data = JSON.parse(cached);
   }
 
@@ -1851,8 +1877,11 @@ async function loadRegion(key) {
     console.log(`Region ${key} grid loaded successfully. LZ at:`, region.landing);
   } else {
     console.warn(`No cache for ${key}, falling back to local simulation generation`);
-    GRID_ROWS = 28;
-    GRID_COLS = 46;
+    // Use per-region dimensions so Faustini (52×32) and de Gerlache (40×36)
+    // produce visually distinct maps instead of the same 46×28 layout.
+    const dims = REGION_DIMS[key] || { cols: 46, rows: 28 };
+    GRID_ROWS = dims.rows;
+    GRID_COLS = dims.cols;
     region = generateRegion(key);
   }
   buildTerrainNoise();

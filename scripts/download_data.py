@@ -18,7 +18,7 @@ except ImportError:
 # 5. Extract ONLY the ID part (e.g. 1XyZABC...XYZ) and paste it below:
 # ==============================================================================
 
-GDRIVE_FILE_ID = "YOUR_FILE_ID_HERE"
+GDRIVE_FILE_ID = "1qhxBLijm4dGWh5w3WvOuXlneZZuimDXY"
 
 def download_and_extract():
     if GDRIVE_FILE_ID == "YOUR_FILE_ID_HERE":

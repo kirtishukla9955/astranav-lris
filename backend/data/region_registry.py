@@ -164,9 +164,17 @@ def build_grid_for_region(region_id: str) -> PolarGrid:
     import random
     import math
     
-    # Use a fixed seed so the map is consistent between reloads
-    seed = 1337 if region_id == "shackleton-east" else 5021
+    # Use a unique seed per region so each map looks visually distinct
+    REGION_SEEDS_BACKEND = {
+        "shackleton-east": 1337,   # was wrongly assigned to shackleton on the frontend
+        "shackleton":      9271,   # now consistent with frontend
+        "faustini":        7391,
+        "degerlache":      4256,
+        "haworth":         6628,
+    }
+    seed = REGION_SEEDS_BACKEND.get(region_id, 5021)
     rng = random.Random(seed)
+
     
     craters = []
     crater_count = 5 + int(rng.random() * 3)
