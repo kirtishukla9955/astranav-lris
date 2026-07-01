@@ -7,23 +7,31 @@ from schemas import IceLayerData
 from confidence import route_segment_confidence
 
 def test_pathfinder_shadow_avoidance():
-    # Create a simple 10x10 grid
-    grid = CostGrid(10, 10, resolution_m=1.0)
+    from pathfinder import PolarGrid, CostConfig, StaticBatteryModel, plan_route
+    
+    # Create a simple 10x10 grid with cell_size=1.0m
+    grid = PolarGrid(10, 10, origin_lat=-89.0, origin_lon=0.0, cell_size_m=1.0)
     
     # Put a massive shadow block in the middle
     for y in range(3, 7):
         for x in range(3, 7):
-            grid.shadow_map[y, x] = True
+            grid.mark_shadow(y, x)
             
-    # Route from 1,1 to 8,8
-    route = build_route(grid, (1, 1), (8, 8), "test")
-    assert route is not None
+    # Route from (1,1) to (8,8)
+    config = CostConfig(battery_model=StaticBatteryModel(1.0))
+    start_lat = grid._row_to_lat(1)
+    start_lon = grid._col_to_lon(1)
+    end_lat = grid._row_to_lat(8)
+    end_lon = grid._col_to_lon(8)
     
-    # With a 25,000x penalty, the A* should completely route around the shadow.
+    route = plan_route(grid, start_lat, start_lon, end_lat, end_lon, config)
+    assert route is not None
+    assert route.route_found, "Pathfinder should find a route"
+    
+    # With shadow penalty, the A* should completely route around the shadow.
     for wpt in route.waypoints:
-        # Convert back from mock lat/lon coordinates
-        x, y = int(round(wpt.lon / 0.0001)), int(round(wpt.lat / 0.0001))
-        assert not grid.is_in_shadow(x, y), f"Pathfinder failed to avoid shadow at {x},{y}"
+        row, col = grid.lat_lon_to_cell(wpt.lat, wpt.lon)
+        assert not grid.get_cell(row, col).is_shadowed, f"Pathfinder failed to avoid shadow at {row},{col}"
 
 def test_lmrs_scoring_math():
     ice_data = IceLayerData(lat=0.0, lon=0.0, ice_volume_m3=1000.0, ice_depth_m=1.0, confidence=0.9)
