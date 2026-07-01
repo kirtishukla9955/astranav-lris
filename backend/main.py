@@ -70,6 +70,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     logger.info("AstraNav-LRIS backend starting…")
 
+    # [Deployment Hook] Ensure data is downloaded if missing
+    import subprocess
+    import sys
+    try:
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "download_data.py")
+        if os.path.exists(script_path):
+            subprocess.run([sys.executable, script_path], check=True)
+    except Exception as exc:
+        logger.error("Failed to run data download script: %s", exc)
+
     app.state.grid_cache = GridCache()
 
     # Pre-warm grids for all regions in the background so the first API

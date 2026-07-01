@@ -10,6 +10,16 @@ Write-Host "  AstraNav-LRIS — Team Aura++ Launcher  " -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
+# ── Data Download (Demo/Deployment) ────────────────────────────────────────
+Write-Host "[1/4] Checking for real data downloads (Google Drive)..." -ForegroundColor Yellow
+$downloadJob = Start-Process powershell -ArgumentList @(
+    "-NoExit",
+    "-Command",
+    "cd '$ROOT'; python scripts/download_data.py; exit"
+) -Wait
+
+Start-Sleep -Seconds 1
+
 # ── Detection Service (port 8001) ──────────────────────────────────────────
 Write-Host "[1/3] Starting Detection Service on port 8001..." -ForegroundColor Yellow
 $detectJob = Start-Process powershell -ArgumentList @(
