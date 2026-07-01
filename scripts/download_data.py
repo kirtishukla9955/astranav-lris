@@ -2,6 +2,7 @@ import os
 import sys
 import zipfile
 try:
+    # pyrefly: ignore [missing-import]
     import gdown
 except ImportError:
     print("gdown is not installed. Please run: pip install gdown")
